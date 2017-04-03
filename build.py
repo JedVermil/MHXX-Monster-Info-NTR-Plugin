@@ -35,10 +35,11 @@ def file_check(file,message):
 
 DEVKITARM = str(os.getenv("DEVKITARM"))
 
-CC = DEVKITARM + "/bin/arm-none-eabi-gcc"
-CP = DEVKITARM + "/bin/arm-none-eabi-g++"
-OC = DEVKITARM + "/bin/arm-none-eabi-objcopy" 
-LD = DEVKITARM + "/bin/arm-none-eabi-ld"
+#if not building on windows remove the .exe
+CC = DEVKITARM + "/bin/arm-none-eabi-gcc.exe"
+CP = DEVKITARM + "/bin/arm-none-eabi-g++.exe"
+OC = DEVKITARM + "/bin/arm-none-eabi-objcopy.exe" 
+LD = DEVKITARM + "/bin/arm-none-eabi-ld.exe"
 LIBPATH = '-L./lib'
 
 
@@ -74,10 +75,6 @@ file_check(CP,DEVKITARM_ERROR)
 file_check(LD,DEVKITARM_ERROR)
 file_check(OC,DEVKITARM_ERROR)
 
-mkdirp("plugin/0004000000187000")
-mkdirp("plugin/0004000000185B00")
-mkdirp("plugin/0004000000155400")
-build("USA","plugin/0004000000187000/mhgen.plg")
-build("EUR","plugin/0004000000185B00/mhgen.plg")
-build("JPN","plugin/0004000000155400/mhx.plg")
+mkdirp("plugin/0004000000197100")
+build("JPN","plugin/0004000000197100/mhxx.plg")
 
