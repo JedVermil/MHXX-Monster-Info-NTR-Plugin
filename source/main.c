@@ -1,4 +1,3 @@
-
 #include "global.h"
 #include "ov.h"
 
@@ -7,63 +6,53 @@ Handle fsUserHandle = 0;
 
 #pragma pack(push,1)
 
-// Monster part status
-typedef struct {
-    u8 break_level;
-    u8 cut; // 0 = not-cut, 1 = cut off
-    u16 stagger; // when this number reaches zero, the monster will stagger
-    s16 hp; // when this number reaches zero the part will be cut off
-} Part;
-
-
-// Active monster information
+//Monster info (incomplete)
 typedef struct
 {
-  u8 unknown1[0x1318];
+  u8 unknown1;      //78 for big, 40 for small
+  u16 unknown2;     //monster id
+  u8 unknown3;      //alive?
+  u32 unused1[2];
+  u8 fixed1;        //22
+  u8 unknown4;      //another monster id
+  u8 unknown5;      //alive?
+  u8 optional1;
+  u32 fixed2;       //0F 08 00 00
+  u32 optional2[2];
+  u8 big_only1;     //only big monsters have this filled
+  u16 unused2;
+  u8 big_only2;     //only big mosnters have this filled
+  u8 ignore[0x13F8];
   u32 hp;
-  u32 hp_max;
-  u8 unknown2[0x3e];
-  Part parts[8];
+  u32 max_hp;
 } Monster;
 
 #pragma pack(pop)
 
-
 typedef struct
 {
-  Monster* monster;
-  s16 max[8];
-  u8 remove;
-} PartMax;
-
+  u32 r;
+  u32 g;
+  u32 b;
+} Color;
 
 static Handle ptmuHandle;
 
 #define CALLBACK_OVERLAY (101)
 
 extern u32 getCurrentProcessHandle();
-
 extern void initSharedFunc();
 
-
-#ifdef GAME_REGION_USA
-#define MONSTER_ARRAY_ADDR 0x083343A4
-#endif
-
-#ifdef GAME_REGION_EUR
-#define MONSTER_ARRAY_ADDR 0x08334984
-#endif
-
 #ifdef GAME_REGION_JPN
-#define MONSTER_ARRAY_ADDR 0x08325244
+#define MONSTER_POINTER_LIST_ADDR 0x082B9674
 #endif
 
-// This is where the game stores the active monsters on the current zone.
-static Monster** monster_array = (Monster**)MONSTER_ARRAY_ADDR;
+const u8 MAX_POINTERS_TO_CHECK = 10;
+const u8 MIN_WIDTH = 10;  //keep away from screen border
+const u16 BOTTOM_SCREEN_WIDTH = 320;
 
-// Max HP of individual monster parts.
-static PartMax part_max[16];
-static s32 part_max_count = 0;
+//get a list of pointers that points to the monster structs
+static Monster** pointer_list = (Monster**)MONSTER_POINTER_LIST_ADDR;
 
 Result ptmuInit(void)
 {
@@ -71,151 +60,81 @@ Result ptmuInit(void)
   return res;
 }
 
-void setMaxHP(u16* monster_hp_max,u16 monster_hp)
+Color calculateColor(int hp, int max_hp)
 {
-  if(monster_hp == 0 || monster_hp > *monster_hp_max)
+  Color c = {.r = 255, .g = 255, .b = 255};
+  
+  if (hp == 0)
   {
-    *monster_hp_max = monster_hp;
+    c.r = 192;
+    c.g = 192;
+    c.b = 192;
   }
+  else if (hp * 5 < max_hp)  //20%
+  {
+    c.g = 0;
+    c.b = 0;
+  }
+  else if (hp * 10 < max_hp * 3)  //30%
+  {
+    c.b = 0;
+  }
+  else
+  {
+    c.r = 0;
+    c.b = 0;
+  }
+  
+  return c;
 }
 
-u32 drawMonsterHP(u32 addr, u32 stride, u32 format)
+u32 debugListPointers(u32 addr, u32 stride, u32 format)
 {
-  Monster* monsters[8];
+  u32 posR = MIN_WIDTH;
+  char msg[100];
+  
+  for (u32 i = 0; i < MAX_POINTERS_TO_CHECK; i++)
+  {
+    Monster* m = pointer_list[i];
+    if (!m)
+      continue;
+    
+    xsprintf(msg, "%X", (u32)m);
+    ovDrawString(addr, stride, format, BOTTOM_SCREEN_WIDTH, posR, 4, 255, 255, 255, msg);
+    posR += 10;
+  }
+  
+  return 0;
+}
+
+u32 displayInfo(u32 addr, u32 stride, u32 format)
+{
   u32 count = 0;
-
-  // Pick large monsters  
-  for(u32 i = 0; i < 8; i++)
+  u32 posR = MIN_WIDTH;
+  char msg[100];
+  Color c;
+  
+  for (u32 i = 0; i < 10; i++)
   {
-    Monster* m = monster_array[i];
-    if(m && m->hp_max > 300 && m->hp > 0)
-    {
-       monsters[count++] = m;
-    }
+    Monster* m = pointer_list[i];
+    if (!m)
+      continue;
+    
+    c = calculateColor(m->hp, m->max_hp);
+    xsprintf(msg, "%u/%u", m->hp, m->max_hp);
+    ovDrawString(addr, stride, format, BOTTOM_SCREEN_WIDTH, posR, 4, 255, 255, 255, "HP:");
+    ovDrawString(addr, stride, format, BOTTOM_SCREEN_WIDTH, posR, 36, c.r, c.g, c.b, msg);
+    posR += 10;
+    count++;
   }
-
-
-  if(count > 0)
+  
+  if (count == 0)
   {
-    for(u32 i = 0; i < part_max_count;i++)
-    {
-      part_max[i].remove = 1;
-    }
-
-    // Initialize max monster part HP.
-    for(u32 i = 0; i < count;i++)
-    {
-      u8 add = 1;
-      for(u32 j = 0; j < part_max_count; j++)
-      {
-        if(monsters[i] == part_max[j].monster)
-        {
-          // Monster already on list.
-          add = 0;
-          part_max[j].remove = 0;
-          break;
-        }
-      }
-
-      // Add new monster to the list.
-      if(add)
-      {
-        part_max[part_max_count].monster = monsters[i];
-        part_max[part_max_count].remove = 0;
-        for(u32 j = 0; j < 8; j++)
-        {
-          part_max[part_max_count].max[j] = monsters[i]->parts[j].hp;
-        }
-        part_max_count++;
-      }
-    }
-
-    // Cleanup part HP of dead monsters.
-    if(part_max_count > 0)
-    {
-      for(s32 i = part_max_count - 1; i >= 0 ;i--)
-      {
-        if(part_max[i].remove)
-        {
-          part_max[i] = part_max[--part_max_count];
-        }
-      }
-    }
-
-    u32 width = 320 / count - 8;
-
-    for(u32 i = 0; i < count; i++)
-    {
-      Monster* m = monsters[i];
-      u32 x = (width + 4) * i + 4;
-      u32 w = m->hp * width / m->hp_max;
-      ovDrawRect(addr, stride, format, 2, x - 1, 10, width + 2, 255, 255, 255);
-      ovDrawRect(addr, stride, format, 3, x, 8, width, 0, 0, 0);
-
-      u8 r = 0;
-      u8 g = 0;
-
-      if( m->hp * 5 > m->hp_max) // 20% HP
-      {
-        g = 255;
-      }
-      if( m->hp * 10 < m->hp_max * 3) // 30% HP
-      {
-        r = 255;
-      }
-
-      ovDrawRect(addr, stride, format, 3, x, 8, w, r, g, 0);
-
-      for(u32 j = 0; j < part_max_count; j++)
-      {
-        if(part_max[j].monster == m)
-        {
-          u8 parts[8];
-          u32 part_count = 0;
-          for(u32 k = 0; k < 8; k++)
-          {
-            if(m->parts[k].hp > 0 && part_max[j].max[k] > 0 && !m->parts[k].cut)
-            {
-               parts[part_count++] = k;
-            }
-          }
-          if( part_count > 0 )
-          {
-            u32 pwidth = width / part_count - 8;
-
-            for(u32 k = 0; k < part_count; k++)
-            {
-              s16 hp = m->parts[parts[k]].hp;
-              s16 hp_max = part_max[j].max[parts[k]];
-              u32 px = (pwidth + 4) * k + x + 4;
-              u32 pw = hp * pwidth / hp_max;
-              ovDrawRect(addr, stride, format, 11, px - 1, 6, pwidth + 2, 255, 255, 255);
-              ovDrawRect(addr, stride, format, 12, px, 4, pwidth, 0, 0, 0);
-
-              r = 0;
-              g = 0;
-
-              if( hp * 5 > hp_max) // 20% part HP
-              {
-                g = 255;
-              }
-              if( hp * 10 < hp_max * 3) // 30% part HP
-              {
-                r = 255;
-              }
-
-              ovDrawRect(addr, stride, format, 12, px, 4, pw, r, g, 0);
-            }
-          }
-          break;
-        }
-      }
-    }
-    return 0;
+    return 1;
   }
-  return 1;
+  
+  return 0;
 }
-
 
 /*
 Overlay Callback.
@@ -232,7 +151,7 @@ u32 overlayCallback(u32 isBottom, u32 addr, u32 addrB, u32 stride, u32 format)
 {
   if (isBottom == 1)
   {
-     return drawMonsterHP( addr, stride, format);
+     return displayInfo(addr, stride, format);
   }
   return 1;
 }
@@ -245,4 +164,3 @@ int main()
   plgRegisterCallback(CALLBACK_OVERLAY, (void*) overlayCallback, 0);
   return 0;
 }
-
