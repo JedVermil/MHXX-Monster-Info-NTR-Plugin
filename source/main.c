@@ -48,8 +48,8 @@ extern void initSharedFunc();
 #endif
 
 const u8 MAX_POINTERS_TO_CHECK = 10;
-const u8 MIN_WIDTH = 10;  //keep away from screen border
-const u16 BOTTOM_SCREEN_WIDTH = 320;
+const u8 ROW_WIDTH = 10;
+const u16 BTM_SCRN_WIDTH = 320;
 
 //get a list of pointers that points to the monster structs
 static Monster** pointer_list = (Monster**)MONSTER_POINTER_LIST_ADDR;
@@ -88,20 +88,64 @@ Color calculateColor(int hp, int max_hp)
   return c;
 }
 
+void drawBorder(u32 addr, u32 stride, u32 format, int row, int col, Color c)
+{
+  //left
+  ovDrawRect(addr, stride, format, row, col, ROW_WIDTH, 2, c.r, c.g, c.b);
+  //top
+  ovDrawRect(addr, stride, format, row, col, 2, 104, c.r, c.g, c.b);
+  //right
+  ovDrawRect(addr, stride, format, row, col+102, ROW_WIDTH, 2, c.r, c.g, c.b);
+  //bottom
+  ovDrawRect(addr, stride, format, row + ROW_WIDTH-2, col, 2, 104, c.r, c.g, c.b);
+}
+
+void drawHealthBar(u32 addr, u32 stride, u32 format, int row, int col, int hp, int max_hp)
+{
+  if (hp == 0)
+    return;
+  
+  Color white = {.r = 255, .g = 255, .b = 255};
+  Color c = calculateColor(hp, max_hp);
+  int percentage = hp*100 / max_hp;
+  
+  //always draw at least 1 pixel
+  if (percentage == 0)
+  {
+    percentage = 1;
+  }
+  
+  drawBorder(addr, stride, format, row, col, white);
+  ovDrawRect(addr, stride, format, row+2, col+2, 6, percentage, c.r, c.g, c.b);
+}
+
+u8 getMonsterCount()
+{
+  u8 count = 0;
+  
+  for (u8 i = 0; i < 10; i++)
+  {
+    if (pointer_list[i])
+      count++;
+  }
+  
+  return count;
+}
+
 u32 debugListPointers(u32 addr, u32 stride, u32 format)
 {
-  u32 posR = MIN_WIDTH;
+  u8 row = ROW_WIDTH;
   char msg[100];
   
-  for (u32 i = 0; i < MAX_POINTERS_TO_CHECK; i++)
+  for (u8 i = 0; i < MAX_POINTERS_TO_CHECK; i++)
   {
     Monster* m = pointer_list[i];
     if (!m)
       continue;
     
     xsprintf(msg, "%X", (u32)m);
-    ovDrawString(addr, stride, format, BOTTOM_SCREEN_WIDTH, posR, 4, 255, 255, 255, msg);
-    posR += 10;
+    ovDrawString(addr, stride, format, BTM_SCRN_WIDTH, row, 4, 255, 255, 255, msg);
+    row += 10;
   }
   
   return 0;
@@ -109,28 +153,28 @@ u32 debugListPointers(u32 addr, u32 stride, u32 format)
 
 u32 displayInfo(u32 addr, u32 stride, u32 format)
 {
-  u32 count = 0;
-  u32 posR = MIN_WIDTH;
+  u8 count = 0;
+  u8 row = ROW_WIDTH; //keep away from top edge of screen
   char msg[100];
-  Color c;
   
-  for (u32 i = 0; i < 10; i++)
+  count = getMonsterCount();
+  if (count == 0)
+    return 1;
+  
+  //draw background
+  ovDrawTranspartBlackRect(addr, stride, format, row-2, 2, 2 + ROW_WIDTH*count + 2, 2 + 8*10 + 104 + 2, 1);
+  
+  for (u8 i = 0; i < 10; i++)
   {
     Monster* m = pointer_list[i];
     if (!m)
       continue;
     
-    c = calculateColor(m->hp, m->max_hp);
-    xsprintf(msg, "%u/%u", m->hp, m->max_hp);
-    ovDrawString(addr, stride, format, BOTTOM_SCREEN_WIDTH, posR, 4, 255, 255, 255, "HP:");
-    ovDrawString(addr, stride, format, BOTTOM_SCREEN_WIDTH, posR, 36, c.r, c.g, c.b, msg);
-    posR += 10;
-    count++;
-  }
-  
-  if (count == 0)
-  {
-    return 1;
+    //draw this monster
+    xsprintf(msg, "HP: %u", m->hp);
+    ovDrawString(addr, stride, format, BTM_SCRN_WIDTH, row+1, 4, 255, 255, 255, msg);
+    drawHealthBar(addr, stride, format, row, 4 + 8*10, m->hp, m->max_hp);
+    row += ROW_WIDTH;
   }
   
   return 0;
