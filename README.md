@@ -24,4 +24,4 @@ HP bars will change color depending on what percentage is left. Only large monst
 
 ## Notes
 
-Currently only Monster Hunter Double Cross (MHXX) v1.1 is supported; other versions or previous games (MHX/MHGenerations) are not supported.
+Currently only Monster Hunter Double Cross (MHXX) v1.1 is supported; previous games (MHX/MHGenerations) are not supported. Other versions of the game may be supported but not guaranteed.
