@@ -2,6 +2,37 @@
 #include "font.h"
 #include "ov.h"
 
+static u32 addr_cache;
+static u32 stride_cache;
+static u32 format_cache;
+static u32 screen_width_cache;
+
+void setState(u32 addr, u32 stride, u32 format, u32 screen_width)
+{
+  addr_cache = addr;
+  stride_cache = stride;
+  format_cache = format;
+  screen_width_cache = screen_width;
+}
+
+void drawTransparentBlackRect(int r, int c, int h, int w, int level)
+{
+  ovDrawTranspartBlackRect(addr_cache, stride_cache, format_cache, 
+    r, c, h, w, level);
+}
+
+void drawRect(int posR, int posC, int h, int w, Color c)
+{
+  ovDrawRect(addr_cache, stride_cache, format_cache, 
+    posR, posC, h, w, c.r, c.g, c.b);
+}
+
+void drawString(int posR, int posC, Color c, u8* buffer)
+{
+  ovDrawString(addr_cache, stride_cache, format_cache, screen_width_cache,
+    posR, posC, c.r, c.g, c.b, buffer);
+}
+
 void ovDrawTranspartBlackRect(u32 addr, u32 stride, u32 format, int r, int c, int h, int w, u8 level) {
 	format &= 0x0f;
 	int  posC;
