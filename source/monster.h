@@ -3,6 +3,7 @@
 #include "3dstypes.h"
 
 #define MAX_POINTERS_IN_LIST 10
+#define MAX_PARTS_PER_MONSTER 8
 
 #pragma pack(push,1)
 
@@ -167,6 +168,8 @@ typedef struct
   u8 count;         //0x38: number of pointers
 } MonsterPointerList;
 
+#pragma pack(pop)
+
 typedef struct
 {
   u16 max_stagger_hp;
@@ -180,8 +183,6 @@ typedef struct
   u8 display_count; //for displaying only parts that are cuttable
   u16 break_hp_sum; //only sum displayable parts
 } MonsterCache;
-
-#pragma pack(pop)
 
 //static vars
 static MonsterCache m_cache[2]; //assume only 2 big monsters are active at a time

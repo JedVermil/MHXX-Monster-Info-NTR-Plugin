@@ -4,6 +4,7 @@
 #define TOP_SCRN_WIDTH 400
 #define BTM_SCRN_WIDTH 320
 #define CHAR_HEIGHT 10
+#define CHAR_WIDTH 8
 #define WHITE (color){.r = 255, .g = 255, .b = 255}
 #define RED (color){.r = 255, .g = 0, .b = 0}
 #define GREEN (color){.r = 0, .g = 255, .b = 0}

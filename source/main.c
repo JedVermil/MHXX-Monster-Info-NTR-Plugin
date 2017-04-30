@@ -3,19 +3,20 @@
 #include "monster.h"
 #include "settings.h"
 #include "menu.h"
+#include "mem_ops.h"
 
-//constants
-const u8 BACKGROUND_BORDER = 2;
-const u8 TEXT_BORDER = 4;
+#define STARTUP_BANNER_TIMEOUT_COUNT 60
+#define BACKGROUND_BORDER 2
+#define TEXT_BORDER 4
 
 //global vars
 //note: variables are required by libntrplg to function and must be named exactly this way
 FS_archive sdmcArchive = { 0x9, (FS_path){ PATH_EMPTY, 1, (u8*)"" } };
 Handle fsUserHandle = 0;
-u32 IoBasePad = 0xFFFD4000;
 
 //static vars
 static volatile Settings settings = {
+    .is_modified = 0,
     .pointer_list = 0,
     .show_overlay = 1,
     .show_small_monsters = 0,
@@ -23,14 +24,8 @@ static volatile Settings settings = {
     .show_percentage = 0,
     .display_location = 0,
     .background_level = 1,
-    .health_bar_width = 100
+    .health_bar_width = 100,
   };
-static volatile u8 is_menu_active = 0;
-
-u32 getKey() 
-{
-	return (*(vu32*)(IoBasePad) ^ 0xFFF) & 0xFFF;
-}
 
 color calculateColor(int hp, int max_hp)
 {
@@ -96,7 +91,7 @@ void drawHealthBarWithParts(int row, int col, int hp, int max_hp, MonsterCache* 
   drawRect(row + 7-2, col, 1, 2+settings.health_bar_width+2, WHITE);
 
   u8 offset = 2;
-  for (u8 i = 0; i < 8; i++)
+  for (u8 i = 0; i < MAX_PARTS_PER_MONSTER; i++)
   {
     if (cache->p[i].max_break_hp <= 5)
       continue;
@@ -132,120 +127,6 @@ void drawHealthBarWithParts(int row, int col, int hp, int max_hp, MonsterCache* 
   }
 }
 
-void findListPointer()
-{
-  //single instance only, needed because this can take some time
-  static volatile u8 is_running = 0;
-  if (is_running)
-    return;
-  
-  //avoid running too frequently
-  //note: avoids tearing in opening and drop in framerate before first quest
-  static volatile u64 tick = 0;
-  if (tick > svc_getSystemTick())
-    return;
-  tick = svc_getSystemTick() + 400000000;
-  
-  is_running = 1;
-  
-  const u32 search_start = 0x08200000;
-  const u32 search_end = 0x08300000;
-  const u32 valid_pointer_min = 0x30000000;
-  const u32 valid_pointer_max = 0x30200000; //this is just a guess
-  
-  u32 offset = search_start;
-  while (offset < search_end)
-  {
-    MonsterPointerList* l = (MonsterPointerList*)offset;
-    u8 skip = 0;  //flag for whether we should skip to next offset (for inner loops)
-    
-    //check the 15 bytes of unused
-    //note: the boundary condition is wrong, should be i >= 0; however, this causes the game to fail to load for some reason
-    //      So, leaving this "error" in for now; it seems to work OK
-    for (u8 i = 14; i > 0; i--)
-    {
-      if (l->unused[i] > 1)
-      {
-        offset += i + 2;
-        skip = 1;
-        break;
-      }
-      else if (l->unused[i] == 1)
-      {
-        offset += i + 1;
-        skip = 1;
-        break;
-      }
-    }
-    if (skip)
-    { 
-      //only advance even numbers
-      if (offset % 2)
-      {
-        offset++;
-      }
-      continue;
-    }
-    
-    //check the first fixed byte
-    if (l->fixed != 1)
-    {
-      offset += 16;
-      continue;
-    }
-    
-    //check the monster pointers:
-    // 1. should be within valid pointer min and max
-    // 2. if one is 0, the rest must be 0
-    // 3. should add up to count
-    u8 my_count = 0;
-    u8 should_be_0 = 0;
-    for (u8 i = 0; i < 8; i++)
-    {
-      u32 p = (u32)(l->m[i]);
-      
-      if (p == 0)
-      {
-        if (i == 0)
-        { //must have at least 1 monster to be sure it's valid
-          skip = 1;
-          break;
-        }
-        else
-        {
-          should_be_0 = 1;
-        }
-      }
-      else if (should_be_0)
-      { //there shouldn't be null pointers in between entries in the list
-        skip = 1;
-        break;
-      }
-      else if (p < valid_pointer_min || p > valid_pointer_max)
-      { //make some assumptions about where the pointer should live in
-        skip = 1;
-        break;
-      }
-      else
-      {
-        my_count++;
-      }
-    }
-    if (skip || my_count != l->count)
-    { //only skip the fixed and unused bytes
-      offset += 16;
-      continue;
-    }
-    
-    //we found it!!!
-    settings.pointer_list = (MonsterPointerList*)offset;
-    is_running = 0;
-    return;
-  }
-  
-  is_running = 0;
-}
-
 u32 debugListPointers()
 {
   u16 row = CHAR_HEIGHT;
@@ -271,13 +152,13 @@ u32 debugListPointers()
 u32 debugListStructs()
 {
   u16 row = CHAR_HEIGHT;
-  char msg[BTM_SCRN_WIDTH/8];
+  char msg[BTM_SCRN_WIDTH/CHAR_WIDTH];
   u8 drawn = 0;
   
   updateMonsterCache(settings.pointer_list);
   
-  drawTransparentBlackRect(row-2, 2, 2 + CHAR_HEIGHT*8 + 2, BTM_SCRN_WIDTH-4, 2);
-  for (u8 j = 0; j < 8; j++)
+  drawTransparentBlackRect(row-2, 2, 2 + CHAR_HEIGHT*CHAR_WIDTH + 2, BTM_SCRN_WIDTH-4, 2);
+  for (u8 j = 0; j < MAX_PARTS_PER_MONSTER; j++)
   {
     Monster* m1 = settings.pointer_list->m[0];
     Monster* m2 = settings.pointer_list->m[1];
@@ -314,7 +195,7 @@ u32 debugListStructs()
     
     if (!drawn)
     {
-      drawTransparentBlackRect(row-2, 2, 2 + CHAR_HEIGHT*8 + 2, BTM_SCRN_WIDTH-4, 2);
+      drawTransparentBlackRect(row-2, 2, 2 + CHAR_HEIGHT*CHAR_WIDTH + 2, BTM_SCRN_WIDTH-4, 2);
       drawn = 1;
     }
     
@@ -352,7 +233,7 @@ u32 debugBitChecker()
   }
   
   u16 row = CHAR_HEIGHT;
-  char msg[BTM_SCRN_WIDTH/8];
+  char msg[BTM_SCRN_WIDTH/CHAR_WIDTH];
   u8 drawn = 0;
   
   for (u8 i = 0; i < MAX_POINTERS_IN_LIST; i++)
@@ -363,7 +244,7 @@ u32 debugBitChecker()
     
     if (!drawn)
     {
-      drawTransparentBlackRect(row-2, 2, 2 + CHAR_HEIGHT*8 + 2, BTM_SCRN_WIDTH-4, 1);
+      drawTransparentBlackRect(row-2, 2, 2 + CHAR_HEIGHT*CHAR_WIDTH + 2, BTM_SCRN_WIDTH-4, 1);
       drawn = 1;
     }
     
@@ -372,7 +253,7 @@ u32 debugBitChecker()
     {
       if (j == 2 || j == 4)
       {
-        col += 8;
+        col += CHAR_WIDTH;
       }
       /* if (j > 0 && j % 10 == 0)
       {
@@ -382,7 +263,7 @@ u32 debugBitChecker()
       u8 value = *((u8*)((u32)m + offsets[j]));
       xsprintf(msg, "%02X", value & bits[j]);
       drawString(row, col, WHITE, msg);
-      col += 8*3;
+      col += CHAR_WIDTH*3;
     }
     row += CHAR_HEIGHT;
   }
@@ -392,11 +273,9 @@ u32 debugBitChecker()
 
 u32 debugFindListPointer()
 {
-  char msg[BTM_SCRN_WIDTH/8];
+  char msg[BTM_SCRN_WIDTH/CHAR_WIDTH];
   
-  findListPointer();
-  
-  if (settings.pointer_list)
+  if (findListPointer(&settings))
   {
     xsprintf(msg, "Found pointer: %08X", (u32)settings.pointer_list);
     drawString(CHAR_HEIGHT, 2, WHITE, msg);
@@ -430,7 +309,7 @@ u32 displayInfo()
 {
   u8 count = 0;
   u16 row = 0; //keep away from top edge of screen
-  char msg[BTM_SCRN_WIDTH/8];
+  char msg[BTM_SCRN_WIDTH/CHAR_WIDTH];
   
   count = getMonsterCount(settings.pointer_list, settings.show_small_monsters);
   if (count == 0)
@@ -441,14 +320,14 @@ u32 displayInfo()
   //calculate offsets to display location
   //note: top/bottom screen separation is done by overlayCallback()
   //note: display size includes background, but offsets do not
-  u16 display_width = TEXT_BORDER-BACKGROUND_BORDER + 8*8 + TEXT_BORDER*2 + 2+settings.health_bar_width+2 + TEXT_BORDER-BACKGROUND_BORDER;
+  u16 display_width = TEXT_BORDER-BACKGROUND_BORDER + CHAR_WIDTH*8 + TEXT_BORDER*2 + 2+settings.health_bar_width+2 + TEXT_BORDER-BACKGROUND_BORDER;
   if (settings.show_percentage)
   {
-    display_width -= 8*2;
+    display_width -= CHAR_WIDTH*2;
   }
   if (settings.show_special_stats)
   {
-    display_width += 8*12 + TEXT_BORDER-BACKGROUND_BORDER;
+    display_width += CHAR_WIDTH*12 + TEXT_BORDER-BACKGROUND_BORDER;
   }
   u16 display_height = TEXT_BORDER-BACKGROUND_BORDER + CHAR_HEIGHT*count + TEXT_BORDER-BACKGROUND_BORDER;
   u16 row_offset, col_offset;
@@ -491,13 +370,13 @@ u32 displayInfo()
     {
       xsprintf(msg, "HP:%3u", calculatePercentage(m->hp, m->max_hp));
       drawString(row_offset + row+1, col, WHITE, msg);
-      col += 8*6 + TEXT_BORDER*2;
+      col += CHAR_WIDTH*6 + TEXT_BORDER*2;
     }
     else
     {
       xsprintf(msg, "HP:%5u", m->hp);
       drawString(row_offset + row+1, col, WHITE, msg);
-      col += 8*8 + TEXT_BORDER*2;
+      col += CHAR_WIDTH*8 + TEXT_BORDER*2;
     }
     MonsterCache* cache = getCachedMonsterByPointer(m);
     if (cache)
@@ -520,11 +399,11 @@ u32 displayInfo()
       xsprintf(msg, "%4u", (settings.show_percentage) ? 
         calculatePercentage(m->max_paralysis - m->paralysis, m->max_paralysis) : 
         m->max_paralysis - m->paralysis);
-      drawString(row_offset + row+1, col + 8*4, YELLOW, msg);
+      drawString(row_offset + row+1, col + CHAR_WIDTH*4, YELLOW, msg);
       xsprintf(msg, "%4u", (settings.show_percentage) ? 
         calculatePercentage(m->max_sleep - m->sleep, m->max_sleep) : 
         m->max_sleep - m->sleep);
-      drawString(row_offset + row+1, col + 8*8, CYAN, msg);
+      drawString(row_offset + row+1, col + CHAR_WIDTH*8, CYAN, msg);
     }
     
     row += CHAR_HEIGHT;
@@ -547,20 +426,37 @@ return 0 on success. return 1 when nothing in framebuffer was modified.
 u32 overlayCallback(u32 isBottom, u32 addr, u32 addrB, u32 stride, u32 format)
 {
   static u16 count = 0;
+  static volatile MenuState menu = {0};
   
   if (isBottom == 1)
   {
     setState(addr, stride, format, BTM_SCRN_WIDTH);
     
-    u32 key = getKey();
-    is_menu_active &= !(key & MENU_DEACTIVATE);
-    if (is_menu_active || key == MENU_ACTIVATE)
+    //menu activation/deactivation check
+    u32 key = 0;
+    if (!menu.is_busy)
     {
-      is_menu_active = 1;
-      return displayMenu(key, &settings);
+      key = getKey();
+    }
+    menu.is_active &= !(key & MENU_DEACTIVATE);
+    if (menu.is_active || key == MENU_ACTIVATE)
+    {
+      if (!menu.is_active)
+      {
+        menu.is_active = 1;
+        settings.is_modified = 0;
+      }
+      return displayMenu(key, &settings, &menu);
     }
     
-    if (count < 60)
+    //settings save check
+    if (settings.is_modified)
+    {
+      saveSettings(&settings);
+    }
+    
+    //banner for startup
+    if (count < STARTUP_BANNER_TIMEOUT_COUNT)
     {
       drawString(TEXT_BORDER, TEXT_BORDER, WHITE, "MHXX Overlay Plugin Active");
       count++;
@@ -568,7 +464,7 @@ u32 overlayCallback(u32 isBottom, u32 addr, u32 addrB, u32 stride, u32 format)
     
     if (!settings.pointer_list)
     {
-      findListPointer();
+      findListPointer(&settings);
     }
     else if (settings.show_overlay && settings.display_location < 2)
       return displayInfo();
@@ -577,7 +473,7 @@ u32 overlayCallback(u32 isBottom, u32 addr, u32 addrB, u32 stride, u32 format)
   {
     if (!settings.pointer_list)
     {
-      findListPointer();
+      findListPointer(&settings);
     }
     else
     {
@@ -605,13 +501,14 @@ int main()
   
   if (((NS_CONFIG*)(NS_CONFIGURE_ADDR))->sharedFunc[8])
   {
-    IoBasePad = plgGetIoBase(IO_BASE_PAD);
+    updateIoBasePad(plgGetIoBase(IO_BASE_PAD));
   }
   
   srv_getServiceHandle(0, &fsUserHandle, "fs:USER");
     //need this to open files, for the first parameter to FSUSER_~ calls
-    //note: plgGetSharedServiceHandle("fs:USER", &fsUserHandle) is broken
+    //note: plgGetSharedServiceHandle("fs:USER", &fsUserHandle) doesn't work here as it's only for home menu
   
+  loadSettings(&settings);
   plgRegisterCallback(CALLBACK_OVERLAY, (void*) overlayCallback, 0);
   
   return 0;

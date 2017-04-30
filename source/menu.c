@@ -1,6 +1,6 @@
 #include "menu.h"
 
-u32 displayMenu(u32 key, volatile Settings *settings)
+u32 displayMenu(u32 key, volatile Settings *settings, volatile MenuState* menu)
 {  
   static const char* menu_options[] = {
       "Show overlay",
@@ -10,6 +10,8 @@ u32 displayMenu(u32 key, volatile Settings *settings)
       "Display location",
       "Background level",
       "Health bar width",
+      "",
+      "Search for monster list",
     };
   static const char* menu_states[][4] = {
       {"off", "on"},
@@ -19,6 +21,8 @@ u32 displayMenu(u32 key, volatile Settings *settings)
       {"BTM TOP-LEFT", "BTM BTM-LEFT", "TOP TOP-RIGHT", "TOP BTM_LEFT"},
       {},
       {},
+      {},
+      {"", "RUNNING", "SUCCESS", "FAILED"},
     };
   static const char* state_descriptions[][3] = {
       {"Enable/disable monster info overlay", "", ""},
@@ -28,12 +32,15 @@ u32 displayMenu(u32 key, volatile Settings *settings)
       {"Location of the overlay", "First part is top/bottom screen,", "and second part is screen corner"},
       {"Transparency of the overlay background", "Higher values are darker", "Set to 0 to disable background"},
       {"Length of the HP bar, in pixels", "Part bars will also scale", ""},
+      {"", "", ""},
+      {"Try this if nothing displays", "Make sure you are in a quest", "Current location: "},
     };
   static const u8 num_options = sizeof(menu_options) / sizeof(char*);
   static const u8 max_displayed_options = 14;
+  static volatile u8 opp_state = 0; //used to index menu_states for non-settings operations
   static u8 index = 0;
   static u8 display_index_start = 0;
-  static u8 display_index_end = 6;  //manually adjust this to 1 minus either num_options or max_displayed_options, whichever is smaller
+  static u8 display_index_end = 8;  //manually adjust this to 1 minus either num_options or max_displayed_options, whichever is smaller
   static u64 tick = 0;
   
   drawTransparentBlackRect(0, 0, SCREEN_HEIGHT, BTM_SCRN_WIDTH, 2);
@@ -92,7 +99,17 @@ u32 displayMenu(u32 key, volatile Settings *settings)
       case 6:
         settings->health_bar_width--;
         break;
+      case 7:
+        //do nothing
+        break;
+      case 8:
+        menu->is_busy = 1;
+        opp_state = 1;
+        opp_state = (findListPointer(settings)) ? 2 : 3;
+        menu->is_busy = 0;
+        break;
     }
+    settings->is_modified = 1;
     tick = svc_getSystemTick() + BTN_WAIT_TICK_COUNT;
   }
   else if (key & BUTTON_DR)
@@ -121,7 +138,17 @@ u32 displayMenu(u32 key, volatile Settings *settings)
       case 6:
         settings->health_bar_width++;
         break;
+      case 7:
+        //do nothing
+        break;
+      case 8:
+        menu->is_busy = 1;
+        opp_state = 1;
+        opp_state = (findListPointer(settings)) ? 2 : 3;
+        menu->is_busy = 0;
+        break;
     }
+    settings->is_modified = 1;
     tick = svc_getSystemTick() + BTN_WAIT_TICK_COUNT;
   }
   else
@@ -144,7 +171,7 @@ u32 displayMenu(u32 key, volatile Settings *settings)
   }  
     
   //display settings
-  char msg[BTM_SCRN_WIDTH/8];
+  char msg[BTM_SCRN_WIDTH/CHAR_WIDTH];
   for (u8 i = display_index_start; i <= display_index_end; i++)
   {
     switch (i)
@@ -170,12 +197,18 @@ u32 displayMenu(u32 key, volatile Settings *settings)
       case 6:
         xsprintf(msg, "%s: %u", menu_options[i], settings->health_bar_width);
         break;
+      case 7:
+        xsprintf(msg, "");
+        break;
+      case 8:
+        xsprintf(msg, "%s: %s", menu_options[i], menu_states[i][opp_state]);
+        break;
     }
     if (i == index)
     {
-      drawString(row, 2 + 8, WHITE, ">");
+      drawString(row, 2 + CHAR_WIDTH, WHITE, ">");
     }
-    drawString(row, 2 + 8*3, WHITE, msg);
+    drawString(row, 2 + CHAR_WIDTH*3, WHITE, msg);
     row += CHAR_HEIGHT;
   }
   
@@ -185,7 +218,16 @@ u32 displayMenu(u32 key, volatile Settings *settings)
   row += CHAR_HEIGHT;
   for (u8 i = 0; i < 3; i++)
   {
-    xsprintf(msg, "%s", state_descriptions[index][i]);  //ovDrawString doesn't like const pointers
+    //dynamic descriptions
+    if (index == 8 && i == 2)
+    {
+      xsprintf(msg, "%s %08X", state_descriptions[index][i], settings->pointer_list);
+    }
+    else
+    {
+      xsprintf(msg, "%s", state_descriptions[index][i]);  //ovDrawString doesn't like const pointers
+    }
+    
     drawString(row, 2, WHITE, msg);
     row += CHAR_HEIGHT;
   }
