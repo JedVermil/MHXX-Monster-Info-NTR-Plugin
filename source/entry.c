@@ -2,6 +2,7 @@
 
 extern u32 __c_bss_start;
 extern u32 __c_bss_end;
+extern u32 main();
 
 void c_entry(u32* reg) {
 	u32 i;

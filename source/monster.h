@@ -1,5 +1,9 @@
 #pragma once
 
+#include "3dstypes.h"
+
+#define MAX_POINTERS_IN_LIST 10
+
 #pragma pack(push,1)
 
 //Parts info
@@ -155,13 +159,39 @@ naming convention:
   0x6A07: 1byte vary.
 */
 
-//Monster Pointer List
 typedef struct
 {
   u8 fixed;         //0x0: fixed at 1
   u8 unused[0xF];   //0x1
-  Monster* m[10];   //0x10
+  Monster* m[MAX_POINTERS_IN_LIST];   //0x10
   u8 count;         //0x38: number of pointers
 } MonsterPointerList;
 
+typedef struct
+{
+  u16 max_stagger_hp;
+  s16 max_break_hp;
+} PartCache;
+
+typedef struct
+{
+  Monster* m;       //set to 0 to deactivate
+  PartCache p[8];
+  u8 display_count; //for displaying only parts that are cuttable
+  u16 break_hp_sum; //only sum displayable parts
+} MonsterCache;
+
 #pragma pack(pop)
+
+//static vars
+static MonsterCache m_cache[2]; //assume only 2 big monsters are active at a time
+
+inline u8 isSmallMonster(Monster* m)
+{
+  return m->identifier3 == 0 || m->identifier3 == 0x80;
+}
+
+u8 getMonsterCount(MonsterPointerList* list, u8 show_small_monsters);
+MonsterCache* getCachedMonsterByIndex(u8 index);
+MonsterCache* getCachedMonsterByPointer(Monster* m);
+void updateMonsterCache(MonsterPointerList* list);

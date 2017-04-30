@@ -1,69 +1,22 @@
 #include "global.h"
 #include "ov.h"
 #include "monster.h"
-#include "color.h"
+#include "settings.h"
+#include "menu.h"
 
+//constants
+const u8 BACKGROUND_BORDER = 2;
+const u8 TEXT_BORDER = 4;
+
+//global vars
+//note: variables are required by libntrplg to function and must be named exactly this way
 FS_archive sdmcArchive = { 0x9, (FS_path){ PATH_EMPTY, 1, (u8*)"" } };
 Handle fsUserHandle = 0;
 u32 IoBasePad = 0xFFFD4000;
 
-static Handle ptmuHandle;
-
-#define CALLBACK_OVERLAY (101)
-
-extern u32 getCurrentProcessHandle();
-extern void initSharedFunc();
-
-typedef struct
-{
-  u16 max_stagger_hp;
-  s16 max_break_hp;
-} PartCache;
-
-typedef struct
-{
-  Monster* m;       //set to 0 to deactivate
-  PartCache p[8];
-  u8 display_count; //for displaying only parts that are cuttable
-  u16 break_hp_sum; //only sum displayable parts
-} MonsterCache;
-
-typedef struct
-{
-  u8 show_overlay;        //0 = off, 1 = on
-  u8 show_small_monsters; //0 = off, 1 = on
-  u8 show_special_stats;  //0 = off, 1 = on
-  u8 show_percentage;     //0 = numbers, 1 = percentage
-  u8 display_location;    //0 = bottom top-left, 1 = bottom bottom-left, 
-                          //2 = top top-right, 3 = top bottom-left
-  u8 background_level;
-  u8 health_bar_width;
-} Settings;
-
-//constants
-const u8 MAX_POINTERS_TO_CHECK = 10;
-const u8 ROW_HEIGHT = 10;
-const u8 BACKGROUND_BORDER = 2;
-const u8 TEXT_BORDER = 4;
-const u16 SCREEN_HEIGHT = 240;
-const u16 TOP_SCRN_WIDTH = 400;
-const u16 BTM_SCRN_WIDTH = 320;
-const u32 MENU_ACTIVATE = BUTTON_L | BUTTON_SE;
-const u32 MENU_DEACTIVATE = BUTTON_B;
-const u64 BTN_WAIT_TICK_COUNT = 30000000;
-const Color WHITE = {.r = 255, .g = 255, .b = 255};
-const Color RED = {.r = 255, .g = 0, .b = 0};
-const Color GREEN = {.r = 0, .g = 255, .b = 0};
-const Color ORANGE = {.r = 255, .g = 220, .b = 0};
-const Color PURPLE = {.r = 255, .g = 0, .b = 255};
-const Color YELLOW = {.r = 255, .g = 255, .b = 0};
-const Color CYAN = {.r = 0, .g = 255, .b = 255};
-const Color GREY = {.r = 5, .g = 10, .b = 5};
-
-//global vars
-static MonsterPointerList* pointer_list = 0;
-static MonsterCache m_cache[2]; //assume only 2 big monsters are active at a time
+//static vars
 static volatile Settings settings = {
+    .pointer_list = 0,
     .show_overlay = 1,
     .show_small_monsters = 0,
     .show_special_stats = 1,
@@ -74,18 +27,12 @@ static volatile Settings settings = {
   };
 static volatile u8 is_menu_active = 0;
 
-Result ptmuInit(void)
-{
-  Result res = srv_getServiceHandle(NULL, &ptmuHandle, "ptm:u");
-  return res;
-}
-
 u32 getKey() 
 {
 	return (*(vu32*)(IoBasePad) ^ 0xFFF) & 0xFFF;
 }
 
-Color calculateColor(int hp, int max_hp)
+color calculateColor(int hp, int max_hp)
 {
   if (hp == 0)
     return GREY;
@@ -110,7 +57,7 @@ u16 calculatePercentage(int current_value, int max_value)
   return percentage;
 }
 
-void drawBorder(int row, int col, int height, Color c)
+void drawBorder(int row, int col, int height, color c)
 {
   //left
   drawRect(row, col, height, 2, c);
@@ -127,7 +74,7 @@ void drawHealthBar(int row, int col, int hp, int max_hp)
   if (hp == 0)
     return;
   
-  Color c = calculateColor(hp, max_hp);
+  color c = calculateColor(hp, max_hp);
   u8 bar_length = calculatePercentage(hp, max_hp) * settings.health_bar_width / 100;
   
   drawBorder(row, col, 7, WHITE);
@@ -139,10 +86,10 @@ void drawHealthBarWithParts(int row, int col, int hp, int max_hp, MonsterCache* 
   if (hp == 0)
     return;
   
-  Color c = calculateColor(hp, max_hp);
+  color c = calculateColor(hp, max_hp);
   u8 bar_length = calculatePercentage(hp, max_hp) * settings.health_bar_width / 100;
   
-  drawBorder(row, col, ROW_HEIGHT, WHITE);
+  drawBorder(row, col, CHAR_HEIGHT, WHITE);
   drawRect(row+2, col+2, 3, bar_length, c);
   
   //center divide
@@ -291,7 +238,7 @@ void findListPointer()
     }
     
     //we found it!!!
-    pointer_list = (MonsterPointerList*)offset;
+    settings.pointer_list = (MonsterPointerList*)offset;
     is_running = 0;
     return;
   }
@@ -299,158 +246,17 @@ void findListPointer()
   is_running = 0;
 }
 
-void updateMonsterCache()
-{
-  Monster* new_m1 = 0;
-  Monster* new_m2 = 0;
-  u8 keep_m1 = 0;
-  u8 keep_m2 = 0;
-
-  //check all monsters, excluding small ones
-  for (u8 i = 0; i < MAX_POINTERS_TO_CHECK; i++)
-  {
-    //small monsters have 0x0 or 0x80 for identifier3
-    if (!pointer_list->m[i] || 
-        pointer_list->m[i]->identifier3 == 0 || 
-        pointer_list->m[i]->identifier3 == 0x80)
-      continue;
-    
-    if (pointer_list->m[i] == m_cache[0].m)
-    {
-      keep_m1 = 1;
-    }
-    else if (pointer_list->m[i] == m_cache[1].m)
-    {
-      keep_m2 = 1;
-    }
-    else if (new_m1 == 0)
-    { 
-      //save new monster pointer so we can add parts info later
-      new_m1 = pointer_list->m[i];
-    }
-    else if (new_m2 == 0)
-    {
-      new_m2 = pointer_list->m[i];
-    }
-  }
-
-  //remove expired monster parts
-  if (!keep_m1)
-  {
-    m_cache[0].m = 0;
-    m_cache[0].display_count = 0;
-    m_cache[0].break_hp_sum = 0;
-  }
-  if (!keep_m2)
-  {
-    m_cache[1].m = 0;
-    m_cache[1].display_count = 0;
-    m_cache[1].break_hp_sum = 0;
-  }
-
-  //add new monster info
-  //note: assume new_m2 will never be assigned before new_m1
-  //note: only display parts that have more than 1 break_hp; for non-breakable parts it is typically negative but it can be fixed to 1 if there are special critereas involved
-  if (new_m1)
-  {
-    if (!m_cache[0].m)
-    {
-      m_cache[0].m = new_m1;
-      
-      for (u8 i = 0; i < 8; i++)
-      {
-        m_cache[0].p[i].max_stagger_hp = new_m1->parts[i].stagger_hp;
-        m_cache[0].p[i].max_break_hp = new_m1->parts[i].break_hp;
-        
-        if (m_cache[0].p[i].max_break_hp > 1)
-        {
-          m_cache[0].display_count++;
-          m_cache[0].break_hp_sum += m_cache[0].p[i].max_break_hp;
-        }
-      }
-    }
-    else
-    {
-      m_cache[1].m = new_m1;
-      
-      for (u8 i = 0; i < 8; i++)
-      {
-        m_cache[1].p[i].max_stagger_hp = new_m1->parts[i].stagger_hp;
-        m_cache[1].p[i].max_break_hp = new_m1->parts[i].break_hp;
-        
-        if (m_cache[1].p[i].max_break_hp > 1)
-        {
-          m_cache[1].display_count++;
-          m_cache[1].break_hp_sum += m_cache[1].p[i].max_break_hp;
-        }
-      }
-    }
-  }
-  if (new_m2)
-  {
-    if (!m_cache[0].m)
-    {
-      m_cache[0].m = new_m2;
-      
-      for (u8 i = 0; i < 8; i++)
-      {
-        m_cache[0].p[i].max_stagger_hp = new_m2->parts[i].stagger_hp;
-        m_cache[0].p[i].max_break_hp = new_m2->parts[i].break_hp;
-        
-        if (m_cache[0].p[i].max_break_hp > 1)
-        {
-          m_cache[0].display_count++;
-          m_cache[0].break_hp_sum += m_cache[0].p[i].max_break_hp;
-        }
-      }
-    }
-    else
-    {
-      m_cache[1].m = new_m2;
-      
-      for (u8 i = 0; i < 8; i++)
-      {
-        m_cache[1].p[i].max_stagger_hp = new_m2->parts[i].stagger_hp;
-        m_cache[1].p[i].max_break_hp = new_m2->parts[i].break_hp;
-        
-        if (m_cache[1].p[i].max_break_hp > 1)
-        {
-          m_cache[1].display_count++;
-          m_cache[1].break_hp_sum += m_cache[1].p[i].max_break_hp;
-        }
-      }
-    }
-  }
-}
-
-u8 getMonsterCount()
-{
-  u8 count = 0;
-  
-  for (u8 i = 0; i < MAX_POINTERS_TO_CHECK; i++)
-  {
-    //small monsters have 0x0 or 0x80 for identifier3
-    if (pointer_list->m[i] && 
-        (settings.show_small_monsters || 
-         pointer_list->m[i]->identifier3 != 0 && 
-         pointer_list->m[i]->identifier3 != 0x80))
-      count++;
-  }
-  
-  return count;
-}
-
 u32 debugListPointers()
 {
-  u16 row = ROW_HEIGHT;
+  u16 row = CHAR_HEIGHT;
   char msg[100];
   
   drawString(row, 4, WHITE, "DEBUG: List Pointers");
   row += 10;
   
-  for (u8 i = 0; i < MAX_POINTERS_TO_CHECK; i++)
+  for (u8 i = 0; i < MAX_POINTERS_IN_LIST; i++)
   {
-    Monster* m = pointer_list->m[i];
+    Monster* m = settings.pointer_list->m[i];
     if (!m)
       continue;
     
@@ -464,43 +270,43 @@ u32 debugListPointers()
 
 u32 debugListStructs()
 {
-  u16 row = ROW_HEIGHT;
+  u16 row = CHAR_HEIGHT;
   char msg[BTM_SCRN_WIDTH/8];
   u8 drawn = 0;
   
-  updateMonsterCache();
+  updateMonsterCache(settings.pointer_list);
   
-  drawTransparentBlackRect(row-2, 2, 2 + ROW_HEIGHT*8 + 2, BTM_SCRN_WIDTH-4, 2);
+  drawTransparentBlackRect(row-2, 2, 2 + CHAR_HEIGHT*8 + 2, BTM_SCRN_WIDTH-4, 2);
   for (u8 j = 0; j < 8; j++)
   {
-    Monster* m1 = pointer_list->m[0];
-    Monster* m2 = pointer_list->m[1];
+    Monster* m1 = settings.pointer_list->m[0];
+    Monster* m2 = settings.pointer_list->m[1];
     if (!m1)
       continue;
     else if (!m2)
     {
       xsprintf(msg, "%4u/%4u %4d/%4d", 
-        m1->parts[j].stagger_hp, m_cache[0].p[j].max_stagger_hp,
-        m1->parts[j].break_hp, m_cache[0].p[j].max_break_hp);
+        m1->parts[j].stagger_hp, getCachedMonsterByIndex(0)->p[j].max_stagger_hp,
+        m1->parts[j].break_hp, getCachedMonsterByIndex(0)->p[j].max_break_hp);
     }
     else
     {
       xsprintf(msg, "%4u/%4u %3d/%3d  %4u/%4u %3d/%3d", 
-        m1->parts[j].stagger_hp, m_cache[0].p[j].max_stagger_hp,
-        m1->parts[j].break_hp, m_cache[0].p[j].max_break_hp,
-        m2->parts[j].stagger_hp, m_cache[1].p[j].max_stagger_hp,
-        m2->parts[j].break_hp, m_cache[1].p[j].max_break_hp);
+        m1->parts[j].stagger_hp, getCachedMonsterByIndex(0)->p[j].max_stagger_hp,
+        m1->parts[j].break_hp, getCachedMonsterByIndex(0)->p[j].max_break_hp,
+        m2->parts[j].stagger_hp, getCachedMonsterByIndex(1)->p[j].max_stagger_hp,
+        m2->parts[j].break_hp, getCachedMonsterByIndex(1)->p[j].max_break_hp);
     }
     
     drawString(row, 2, WHITE, msg);
-    row += ROW_HEIGHT;
+    row += CHAR_HEIGHT;
   }
   
   return 0;
   
-  for (u8 i = 0; i < MAX_POINTERS_TO_CHECK; i++)
+  for (u8 i = 0; i < MAX_POINTERS_IN_LIST; i++)
   {
-    Monster* m = pointer_list->m[i];
+    Monster* m = settings.pointer_list->m[i];
     if (!m)
       continue;
     if (m->identifier3 == 0 || m->identifier3 == 0x80)
@@ -508,26 +314,26 @@ u32 debugListStructs()
     
     if (!drawn)
     {
-      drawTransparentBlackRect(row-2, 2, 2 + ROW_HEIGHT*8 + 2, BTM_SCRN_WIDTH-4, 2);
+      drawTransparentBlackRect(row-2, 2, 2 + CHAR_HEIGHT*8 + 2, BTM_SCRN_WIDTH-4, 2);
       drawn = 1;
     }
     
     /* xsprintf(msg, "%u: %02X %02X %02X", 
       m->hp, m->identifier1, m->identifier2, m->identifier3);
     drawString(row, 2, WHITE, msg);
-    row += ROW_HEIGHT; */
+    row += CHAR_HEIGHT; */
     /* xsprintf(msg, "%4u %4u  %4u %4u  %4u %4u", 
       m->poison, m->max_poison, m->paralysis, m->max_paralysis, m->sleep, m->max_sleep);
     drawString(row, 2, WHITE, msg);
-    row += ROW_HEIGHT;
+    row += CHAR_HEIGHT;
     xsprintf(msg, "%4u  %4u  %4u %4u  %4u %4u", 
       m->dizzy, m->exhaust, m->jump, m->max_jump, m->blast, m->max_blast);
     drawString(row, 2, WHITE, msg);
-    row += ROW_HEIGHT;
+    row += CHAR_HEIGHT;
     xsprintf(msg, "%2u  %2u  %2u  %2u  %2u", 
       m->is_asleep, m->jump_counter, m->ride_counter, m->blast_counter, m->status);
     drawString(row, 2, WHITE, msg);
-    row += ROW_HEIGHT; */
+    row += CHAR_HEIGHT; */
     
   }
   
@@ -545,19 +351,19 @@ u32 debugBitChecker()
     return 0;
   }
   
-  u16 row = ROW_HEIGHT;
+  u16 row = CHAR_HEIGHT;
   char msg[BTM_SCRN_WIDTH/8];
   u8 drawn = 0;
   
-  for (u8 i = 0; i < MAX_POINTERS_TO_CHECK; i++)
+  for (u8 i = 0; i < MAX_POINTERS_IN_LIST; i++)
   {
-    Monster* m = pointer_list->m[i];
+    Monster* m = settings.pointer_list->m[i];
     if (!m || m->max_hp < 550)
       continue;
     
     if (!drawn)
     {
-      drawTransparentBlackRect(row-2, 2, 2 + ROW_HEIGHT*8 + 2, BTM_SCRN_WIDTH-4, 1);
+      drawTransparentBlackRect(row-2, 2, 2 + CHAR_HEIGHT*8 + 2, BTM_SCRN_WIDTH-4, 1);
       drawn = 1;
     }
     
@@ -571,14 +377,14 @@ u32 debugBitChecker()
       /* if (j > 0 && j % 10 == 0)
       {
         col = 2;
-        row += ROW_HEIGHT;
+        row += CHAR_HEIGHT;
       } */
       u8 value = *((u8*)((u32)m + offsets[j]));
       xsprintf(msg, "%02X", value & bits[j]);
       drawString(row, col, WHITE, msg);
       col += 8*3;
     }
-    row += ROW_HEIGHT;
+    row += CHAR_HEIGHT;
   }
   
   return 0;
@@ -590,11 +396,32 @@ u32 debugFindListPointer()
   
   findListPointer();
   
-  if (pointer_list)
+  if (settings.pointer_list)
   {
-    xsprintf(msg, "Found pointer: %08X", (u32)pointer_list);
-    drawString(ROW_HEIGHT, 2, WHITE, msg);
+    xsprintf(msg, "Found pointer: %08X", (u32)settings.pointer_list);
+    drawString(CHAR_HEIGHT, 2, WHITE, msg);
   }
+  
+  return 0;
+}
+
+u32 debugFileSystemTest()
+{ 
+  static char msg[100];
+  static u8 run_once = 0;
+  
+  if (run_once)
+  {
+    drawString(CHAR_HEIGHT*2, 2, WHITE, msg);
+    return 0;
+  }
+  run_once = 1;
+  
+  Result r1 = 99;
+  Handle infile = 0;
+  Result r2 = FSUSER_OpenFileDirectly(fsUserHandle, &infile, sdmcArchive, FS_makePath(PATH_CHAR, "/ntr.bin"), FS_OPEN_READ, 0);
+  
+  xsprintf(msg, "%8X  %8X", r1, r2);
   
   return 0;
 }
@@ -605,11 +432,11 @@ u32 displayInfo()
   u16 row = 0; //keep away from top edge of screen
   char msg[BTM_SCRN_WIDTH/8];
   
-  count = getMonsterCount();
+  count = getMonsterCount(settings.pointer_list, settings.show_small_monsters);
   if (count == 0)
     return 1;
   
-  updateMonsterCache();
+  updateMonsterCache(settings.pointer_list);
   
   //calculate offsets to display location
   //note: top/bottom screen separation is done by overlayCallback()
@@ -623,7 +450,7 @@ u32 displayInfo()
   {
     display_width += 8*12 + TEXT_BORDER-BACKGROUND_BORDER;
   }
-  u16 display_height = TEXT_BORDER-BACKGROUND_BORDER + ROW_HEIGHT*count + TEXT_BORDER-BACKGROUND_BORDER;
+  u16 display_height = TEXT_BORDER-BACKGROUND_BORDER + CHAR_HEIGHT*count + TEXT_BORDER-BACKGROUND_BORDER;
   u16 row_offset, col_offset;
   switch (settings.display_location)
   {
@@ -651,10 +478,10 @@ u32 displayInfo()
     col_offset - (TEXT_BORDER-BACKGROUND_BORDER), 
     display_height, display_width, settings.background_level);
   
-  for (u8 i = 0; i < MAX_POINTERS_TO_CHECK; i++)
+  for (u8 i = 0; i < MAX_POINTERS_IN_LIST; i++)
   {
     u16 col = col_offset;
-    Monster* m = pointer_list->m[i];
+    Monster* m = settings.pointer_list->m[i];
     if (!m ||
         (!settings.show_small_monsters && (m->identifier3 == 0 || m->identifier3 == 0x80)))
       continue;
@@ -672,13 +499,10 @@ u32 displayInfo()
       drawString(row_offset + row+1, col, WHITE, msg);
       col += 8*8 + TEXT_BORDER*2;
     }
-    if (m == m_cache[0].m)
+    MonsterCache* cache = getCachedMonsterByPointer(m);
+    if (cache)
     {
-      drawHealthBarWithParts(row_offset + row, col, m->hp, m->max_hp, &m_cache[0]);
-    }
-    else if (m == m_cache[1].m)
-    {
-      drawHealthBarWithParts(row_offset + row, col, m->hp, m->max_hp, &m_cache[1]);      
+      drawHealthBarWithParts(row_offset + row, col, m->hp, m->max_hp, cache);
     }
     else
     {
@@ -703,200 +527,7 @@ u32 displayInfo()
       drawString(row_offset + row+1, col + 8*8, CYAN, msg);
     }
     
-    row += ROW_HEIGHT;
-  }
-  
-  return 0;
-}
-
-u32 displayMenu(u32 key, volatile Settings *my_settings)
-{  
-  static const char* menu_options[] = {
-      "Show overlay",
-      "Show small monsters",
-      "Show special stats",
-      "Show percentage",
-      "Display location",
-      "Background level",
-      "Health bar width",
-    };
-  static const char* menu_states[][4] = {
-      {"off", "on"},
-      {"off", "on"},
-      {"off", "on"},
-      {"numbers", "percentage"},
-      {"BTM TOP-LFT", "BTM BTM-LFT", "TOP TOP-RHT", "TOP BTM_LFT"},
-      {},
-      {},
-    };
-  static const char* state_descriptions[][3] = {
-      {"Enable/disable monster info overlay", "", ""},
-      {"Show/hide small monster info", "", ""},
-      {"Show/hide special attack damage,", "such as poison, paralysis ...etc", ""},
-      {"Show numeric info, such as HP,", "in percentages instead of numbers", ""},
-      {"Location of the overlay", "First part is top/bottom screen,", "and second part is screen corner"},
-      {"Transparency of the overlay background", "Higher values are darker", "Set to 0 to disable background"},
-      {"Length of the HP bar, in pixels", "Part bars will also scale", ""},
-    };
-  static const u8 num_options = sizeof(menu_options) / sizeof(char*);
-  static const u8 max_displayed_options = 14;
-  static u8 index = 0;
-  static u8 display_index_start = 0;
-  static u8 display_index_end = 6;  //manually adjust this to 1 minus either num_options or max_displayed_options, whichever is smaller
-  static u64 tick = 0;
-  
-  drawTransparentBlackRect(0, 0, SCREEN_HEIGHT, BTM_SCRN_WIDTH, 2);
-  
-  //banner
-  u16 row = 5;
-  drawString(row, 2, WHITE, "MHXX Overlay Plugin  by Setsu-BHMT");
-  row += ROW_HEIGHT;
-  drawString(row, 2, WHITE, "  Press UP/DOWN to switch options");
-  row += ROW_HEIGHT;
-  drawString(row, 2, WHITE, "        LEFT/RIGHT to switch state");
-  row += ROW_HEIGHT;
-  drawString(row, 2, WHITE, "        B to exit");
-  row += ROW_HEIGHT;
-  drawString(row, 2, WHITE, "-------------------------------------");
-  row += ROW_HEIGHT;
-  
-  //handle button input
-  if (tick > svc_getSystemTick())
-  {
-    //do nothing, prevent button press bounce
-  }
-  else if (key & BUTTON_DU)
-  {
-    index = (index == 0) ? num_options - 1: index - 1;
-    tick = svc_getSystemTick() + BTN_WAIT_TICK_COUNT;
-  }
-  else if (key & BUTTON_DD)
-  {
-    index = (index == num_options - 1) ? 0 : index + 1;
-    tick = svc_getSystemTick() + BTN_WAIT_TICK_COUNT;
-  }
-  else if (key & BUTTON_DL)
-  {
-    switch (index)
-    {
-      case 0:
-        my_settings->show_overlay = !my_settings->show_overlay;
-        break;
-      case 1:
-        my_settings->show_small_monsters = !my_settings->show_small_monsters;
-        break;
-      case 2:
-        my_settings->show_special_stats = !my_settings->show_special_stats;
-        break;
-      case 3:
-        my_settings->show_percentage = !my_settings->show_percentage;
-        break;
-      case 4:
-        my_settings->display_location = (my_settings->display_location == 0) ? 
-          3 : my_settings->display_location - 1;
-        break;
-      case 5:
-        my_settings->background_level--;
-        break;
-      case 6:
-        my_settings->health_bar_width--;
-        break;
-    }
-    tick = svc_getSystemTick() + BTN_WAIT_TICK_COUNT;
-  }
-  else if (key & BUTTON_DR)
-  {
-    switch (index)
-    {
-      case 0:
-        my_settings->show_overlay = !my_settings->show_overlay;
-        break;
-      case 1:
-        my_settings->show_small_monsters = !my_settings->show_small_monsters;
-        break;
-      case 2:
-        my_settings->show_special_stats = !my_settings->show_special_stats;
-        break;
-      case 3:
-        my_settings->show_percentage = !my_settings->show_percentage;
-        break;
-      case 4:
-        my_settings->display_location = (my_settings->display_location == 3) ? 
-          0 : my_settings->display_location + 1;
-        break;
-      case 5:
-        my_settings->background_level++;
-        break;
-      case 6:
-        my_settings->health_bar_width++;
-        break;
-    }
-    tick = svc_getSystemTick() + BTN_WAIT_TICK_COUNT;
-  }
-  else
-  {
-    //user didn't press anything we care about
-    //so we guard against system tick overflow
-    tick = 0;
-  }
-  
-  //scroll the settings to be displayed
-  while (index > display_index_end)
-  {
-    display_index_start++;
-    display_index_end++;
-  }
-  while (index < display_index_start)
-  {
-    display_index_start--;
-    display_index_end--;
-  }  
-    
-  //display settings
-  char msg[BTM_SCRN_WIDTH/8];
-  for (u8 i = display_index_start; i <= display_index_end; i++)
-  {
-    switch (i)
-    {
-      case 0:
-        xsprintf(msg, "%s: %s", menu_options[i], menu_states[i][my_settings->show_overlay]);
-        break;
-      case 1:
-        xsprintf(msg, "%s: %s", menu_options[i], menu_states[i][my_settings->show_small_monsters]);
-        break;
-      case 2:
-        xsprintf(msg, "%s: %s", menu_options[i], menu_states[i][my_settings->show_special_stats]);
-        break;
-      case 3:
-        xsprintf(msg, "%s: %s", menu_options[i], menu_states[i][my_settings->show_percentage]);
-        break;
-      case 4:
-        xsprintf(msg, "%s: %s", menu_options[i], menu_states[i][my_settings->display_location]);
-        break;
-      case 5:
-        xsprintf(msg, "%s: %u", menu_options[i], my_settings->background_level);
-        break;
-      case 6:
-        xsprintf(msg, "%s: %u", menu_options[i], my_settings->health_bar_width);
-        break;
-    }
-    if (i == index)
-    {
-      drawString(row, 2 + 8, WHITE, ">");
-    }
-    drawString(row, 2 + 8*3, WHITE, msg);
-    row += ROW_HEIGHT;
-  }
-  
-  //display descriptions
-  row = 5 + ROW_HEIGHT * 19;
-  drawString(row, 2, WHITE, "Description--------------------------");
-  row += ROW_HEIGHT;
-  for (u8 i = 0; i < 3; i++)
-  {
-    xsprintf(msg, "%s", state_descriptions[index][i]);  //ovDrawString doesn't like const pointers
-    drawString(row, 2, WHITE, msg);
-    row += ROW_HEIGHT;
+    row += CHAR_HEIGHT;
   }
   
   return 0;
@@ -935,7 +566,7 @@ u32 overlayCallback(u32 isBottom, u32 addr, u32 addrB, u32 stride, u32 format)
       count++;
     }
     
-    if (!pointer_list)
+    if (!settings.pointer_list)
     {
       findListPointer();
     }
@@ -944,7 +575,7 @@ u32 overlayCallback(u32 isBottom, u32 addr, u32 addrB, u32 stride, u32 format)
   }
   else if (settings.show_overlay && settings.display_location > 1) //should display in top screen
   {
-    if (!pointer_list)
+    if (!settings.pointer_list)
     {
       findListPointer();
     }
@@ -965,18 +596,22 @@ u32 overlayCallback(u32 isBottom, u32 addr, u32 addrB, u32 stride, u32 format)
   return 1;
 }
 
+#define CALLBACK_OVERLAY (101)
+
 int main()
 {
-  initSharedFunc();
-  initSrv();
-  ptmuInit();
+  initSrv();  //needed for srv_getServiceHandle
+  initSharedFunc(); //needed for plg~ functions
   
   if (((NS_CONFIG*)(NS_CONFIGURE_ADDR))->sharedFunc[8])
   {
     IoBasePad = plgGetIoBase(IO_BASE_PAD);
   }
   
-  //plgGetSharedServiceHandle("fs:USER", &fsUserHandle);
+  srv_getServiceHandle(0, &fsUserHandle, "fs:USER");
+    //need this to open files, for the first parameter to FSUSER_~ calls
+    //note: plgGetSharedServiceHandle("fs:USER", &fsUserHandle) is broken
+  
   plgRegisterCallback(CALLBACK_OVERLAY, (void*) overlayCallback, 0);
   
   return 0;

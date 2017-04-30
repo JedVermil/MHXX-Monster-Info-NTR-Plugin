@@ -21,13 +21,13 @@ void drawTransparentBlackRect(int r, int c, int h, int w, int level)
     r, c, h, w, level);
 }
 
-void drawRect(int posR, int posC, int h, int w, Color c)
+void drawRect(int posR, int posC, int h, int w, color c)
 {
   ovDrawRect(addr_cache, stride_cache, format_cache, 
     posR, posC, h, w, c.r, c.g, c.b);
 }
 
-void drawString(int posR, int posC, Color c, u8* buffer)
+void drawString(int posR, int posC, color c, u8* buffer)
 {
   ovDrawString(addr_cache, stride_cache, format_cache, screen_width_cache,
     posR, posC, c.r, c.g, c.b, buffer);
@@ -38,7 +38,7 @@ void ovDrawTranspartBlackRect(u32 addr, u32 stride, u32 format, int r, int c, in
 	int  posC;
 	for (posC = c; posC < c + w; posC ++ ) {
 		if (format == 2) {
-			u16* sp = (u16*)(addr + stride * posC + 240 * 2 - 2 * (r + h - 1));
+			u16* sp = (u16*)(addr + stride * posC + SCREEN_HEIGHT * 2 - 2 * (r + h - 1));
 			u16* spEnd = sp + h;
 			while (sp < spEnd) {
 				u16 pix = *sp;
@@ -50,7 +50,7 @@ void ovDrawTranspartBlackRect(u32 addr, u32 stride, u32 format, int r, int c, in
 				sp++;
 			}
         } else if (format == 1) {
-			u8* sp = (u8*)(addr + stride * posC + 240 * 3 - 3 * (r + h - 1));
+			u8* sp = (u8*)(addr + stride * posC + SCREEN_HEIGHT * 3 - 3 * (r + h - 1));
 			u8* spEnd = sp +  3 * h;
 			while (sp < spEnd) {
 				sp[0] >>= level;
@@ -66,9 +66,9 @@ void ovDrawPixel(u32 addr, u32 stride, u32 format, int posR, int posC, u32 r, u3
 	format &= 0x0f;	
 	if (format == 2) {
 		u16 pix =  ((r ) << 11) | ((g ) << 5) | (b );
-		*(u16*)(addr + stride * posC + 240 * 2 -2 * posR) = pix;
+		*(u16*)(addr + stride * posC + SCREEN_HEIGHT * 2 -2 * posR) = pix;
 	} else {
-		u8* sp = (u8*)(addr + stride * posC + 240 * 3 - 3 * posR);
+		u8* sp = (u8*)(addr + stride * posC + SCREEN_HEIGHT * 3 - 3 * posR);
 		sp[0] = b;
 		sp[1] = g;
 		sp[2] = r;
@@ -112,7 +112,7 @@ void ovDrawChar(u32 addr, u32 stride, u32 format, u8 letter,int y, int x, u32 r,
 
 void ovDrawString(u32 addr, u32 stride, u32 format, u32 scrnWidth, int posR, int posC, u32 r, u32 g, u32 b, u8* buf) {
     while(*buf) {
-        if ((posR + 8 > 240) || (posC + 8 > scrnWidth)) {
+        if ((posR + 8 > SCREEN_HEIGHT) || (posC + 8 > scrnWidth)) {
             return;
         }
         ovDrawChar(addr, stride, format, *buf, posR, posC, r, g, b);
