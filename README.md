@@ -25,4 +25,4 @@ HP bars are separated by a horizontal divide to segment a top portion and a bott
 
 Currently only Monster Hunter Double Cross (MHXX) v1.1 is supported; previous games (MHX/MHGenerations) are not supported. Other versions of the game may be supported but not guaranteed.
 
-If you update the game version to something newer you might find that the monster info display no longer shows anything. If so, try doing to the settings menu and selection the option "Search for monster list" (by pressing left or right). If everything goes well it should display "SUCCESS" and fix the problem. You need only do this once and the new location will be saved to your config file.
+If you update the game version to something newer you might find that the monster info display no longer shows anything. If so, try going to the settings menu and run the option "Search for monster list" (by pressing left or right). If everything goes well it should display "SUCCESS" and fix the problem. You need only do this once and the new location will be saved to your config file.
