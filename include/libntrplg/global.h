@@ -1,7 +1,6 @@
 #define IS_PLUGIN 1
 #define USE_SOCKET 0
 
-#include "main.h"
 #include "memory.h"
 #include "math.h"
 #include "3dstypes.h"

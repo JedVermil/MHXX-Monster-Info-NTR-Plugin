@@ -7,7 +7,9 @@
 #define INIT_SHARED_FUNC(name,id) (g_nsConfig->sharedFunc[id] = (u32) name)
 #endif
 
-u32 plgRegisterMenuEntry(u32 catalog, char* title, void* callback) ;
+void initSharedFunc();
+
+u32 plgRegisterMenuEntry(u32 catalog, char* title, void* callback);
 u32 plgGetSharedServiceHandle(char* servName, u32* handle);
 u32 plgRequestMemory(u32 size);
 u32 plgRegisterCallback(u32 type, void* callback, u32 param0);
