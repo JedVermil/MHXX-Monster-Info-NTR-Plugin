@@ -198,6 +198,8 @@ u32 rtGenerateJumpCode(u32 dst, u32* buf) {
 	return 8;
 }
 
+extern u32 getCurrentProcessHandle();
+
 void rtInitHook(RT_HOOK* hook, u32 funcAddr, u32 callbackAddr) {
 	hook->model = 0;
 	hook->isEnabled = 0;
