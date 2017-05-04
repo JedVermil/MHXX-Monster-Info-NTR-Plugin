@@ -71,8 +71,11 @@ u8 findListPointer(volatile Settings* settings)
     // 1. should be within valid pointer min and max
     // 2. if one is 0, the rest must be 0
     // 3. should add up to count
+    // 4. should be strictly increasing
     u8 my_count = 0;
     u8 should_be_0 = 0;
+    u32 valid_pointer_min = 0;
+    u32 valid_pointer_max = 0;
     for (u8 i = 0; i < MAX_POINTERS_IN_LIST; i++)
     {
       u32 p = (u32)(l->m[i]);
@@ -94,13 +97,20 @@ u8 findListPointer(volatile Settings* settings)
         skip = 1;
         break;
       }
-      else if (p < VALID_POINTER_MIN || p > VALID_POINTER_MAX)
+      else if (valid_pointer_min == 0)
+      { //calculate a valid range, using the first pointer
+        valid_pointer_min = p & 0xFF000000; //take only the most-significant byte
+        valid_pointer_max = valid_pointer_min + VALID_POINTER_RANGE;
+        my_count++;
+      }
+      else if (p < valid_pointer_min || p > valid_pointer_max)
       { //make some assumptions about where the pointer should live in
         skip = 1;
         break;
       }
       else
       {
+        valid_pointer_min = p;  //pointer list needs to be strictly increasing
         my_count++;
       }
     }

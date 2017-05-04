@@ -10,85 +10,95 @@
 //Parts info
 typedef struct
 {
-  u16 unknown;		//0x0
-  u32 fixed;		//0x2: F8 99 D0 00
-  u8 stagger_count;	//0x6
-  u8 break_count;	//0x7
-  u16 stagger_hp;	//0x8
-  s16 break_hp;		//0xA	
+  u16 unknown;      //0x0
+  u32 fixed;        //0x2: F8 99 D0 00
+  u8 stagger_count; //0x6
+  u8 break_count;   //0x7
+  u16 stagger_hp;   //0x8
+  s16 break_hp;     //0xA  
 } Part;
 
 //Monster info (incomplete)
 typedef struct
 {
-  u8 identifier1;   //0x0: similar monsters may have same value (rathalos and rathian)
+  u8 identifier1;       //0x0: similar monsters may have same value (rathalos and rathian)
   u8 pad_0x1[0xC];
-  u8 location_flag; //0xD: 4C = in current map, 44 = not in current map
+  u8 location_flag;     //0xD: 4C = in current map, 44 = not in current map
   u8 pad_0xE[0x2];
-  u8 is_despawned;  //0x10: 7 = despawned, F = visible
+  u8 is_despawned;      //0x10: 7 = despawned, F = visible
   u8 pad_0x11[0x217];
-  u8 identifier2;   //0x228: may define some kind of grouping, but not obvious
+  u8 identifier2;       //0x228: may define some kind of grouping, but not obvious
   u8 pad_0x229[0xE57];
-  u16 action;		//0x1080: monster action state (FFFF for small monsters)
+  u16 action;           //0x1080: monster action state (FFFF for small monsters)
   u8 pad_0x1082[0x12E];
-  u8 test1;			//0x11B0
+  u8 test1;             //0x11B0
   u8 pad_0x11B1[0xB1];
-  u8 identifier3;	//0x1262: 00 or 80 for small monsters, 20 for ~drome type, 60 for Great Maccao, 08 for Kirin, otherwise ...
-					//		  04 or 44 for regular monsters, 0C or 4C for hyper monsters or special monsters (eg. Alatreon)
-					//		  Note: deviant/special-form monsters can have either, depending on the species, so not useful for differentiating those
+  u8 identifier3;       //0x1262: 00 or 80 for small monsters, 20 for ~drome type, 60 for Great Maccao, 08 for Kirin, otherwise ...
+                        //        04 or 44 for regular monsters, 0C or 4C for hyper monsters or special monsters (eg. Alatreon)
+                        //        Note: deviant/special-form monsters can have either, depending on the species, so not useful for differentiating those
   u8 pad_0x1263[0x3];
-  u8 identifier4;	//0x1266: unique for each monster, except ~drome type, rathian/rathalos, hyper monsters, special-form; can be used to tell regular vs deviant
+  u8 identifier4;       //0x1266: unique for each monster, except ~drome type, rathian/rathalos, hyper monsters, special-form; can be used to tell regular vs deviant
   u8 pad_0x1267[0x1B1];
-  u32 hp;			//0x1418
-  u32 max_hp;		//0x141C
+  u32 hp;               //0x1418
+  u32 max_hp;           //0x141C
   u8 pad_0x1420[0x3E];
-  Part parts[8];	//0x145E
+  Part parts[8];        //0x145E
   u8 pad_0x14BE[0x543E];
-  u16 poison;       //0x68FC
-  u16 max_sleep;    //0x68FE: unlike other max values, only increases after abnormal state ends (e.g. awakens)
-  u16 sleep;        //0x6900
+  u16 poison;           //0x68FC
+  u16 max_sleep;        //0x68FE: unlike other max values, only increases after abnormal state ends (e.g. awakens)
+  u16 sleep;            //0x6900
   u8 pad_0x6902[0x6];
-  u16 max_poison;   //0x6908
+  u16 max_poison;       //0x6908
   u8 pad_0x690A[0x2];
-  u32 poison_timer; //0x690C
-  u32 poison_deactivate_timer; //0x6910: starts after the poison kicks in
-  u16 max_paralysis;//0x6914
-  u16 paralysis;    //0x6916
-  u32 paralysis_timer; //0x6918
+  u32 poison_timer;     //0x690C
+  u32 poison_deactivate_timer;  //0x6910: starts after the poison kicks in
+  u16 max_paralysis;    //0x6914
+  u16 paralysis;        //0x6916
+  u32 paralysis_timer;  //0x6918
   u8 pad_0x691C[0x4E];
-  u8 is_asleep;     //0x696A: 00 normal 01 asleep or dead
-  u8 pad_0x696B[0x6B];
-  u16 dizzy;        //0x69D6
-  u8 pad_0x69D8[0x4];
-  u32 dizzy_timer;  //0x69DC
-  u8 pad_0x69E0[0x2];
-  u16 exhaust;      //0x69E2
-  u8 pad_0x69E4[0x4];
-  u32 exhaust_timer;//0x69E8
+  u8 is_asleep;         //0x696A: 00 normal 01 asleep or dead
+  u8 pad_0x696B[0x5D];
+  u8 poison_count;      //0x69C8: increase by 1 after poison ends
+  u8 paralysis_count;   //0x69C9: increase by 1 after paralysis ends
+  u8 sleep_count;       //0x69CA: increase by 1 after sleep ends
+  u8 pad_0x69CB[0xB];
+  u16 dizzy;            //0x69D6
+  u16 max_dizzy;        //0x69D8
+  u8 pad_0x69DA[0x2];
+  u32 dizzy_timer;      //0x69DC
+  u8 dizzy_count;       //0x69E0: increase by 1 after dizzy ends
+  u8 pad_0x69E1[0x1];
+  u16 exhaust;          //0x69E2
+  u16 max_exhaust;      //0x69E4
+  u8 pad_0x69E6[0x2];
+  u32 exhaust_timer;    //0x69E8
   u8 pad_0x69EC[0x2];
-  u16 stumble; 		//0x69EE: need testing, increases when jump attacks land, resets to 0 once monster falls
+  u16 stumble;          //0x69EE: need testing, increases when jump attacks land, resets to 0 once monster falls
   u8 pad_0x69F0[0xA];
-  u16 jump;         //0x69FA
-  u16 max_jump;     //0x69FC
+  u16 jump;             //0x69FA
+  u16 max_jump;         //0x69FC
   u8 pad_0x69FE[0x6];
-  u16 ride_counter; //0x6A04: increase by 1 when jump attack reaches threshold, and increases by 256 when ride finishes regardless of success
-  u8 blast_counter; //0x6A06: increase by 1 everytime a blast occurs
+  u8 jump_counter;      //0x6A04: increase by 1 when jump attack reaches threshold
+  u8 ride_counter;      //0x6A05: increase by 1 when ride finishes regardless of success
+  u8 blast_counter;     //0x6A06: increase by 1 everytime a blast occurs
   u8 pad_0x6A07[0x1];
-  u16 max_blast;    //0x6A08
-  u16 blast;        //0x6A0A
+  u16 max_blast;        //0x6A08
+  u16 blast;            //0x6A0A
   u8 pad_0x6A0C[0x4];
-  u32 blast_timer;  //0x6A10
+  u32 blast_timer;      //0x6A10: not entirely sure about this
   u8 pad_0x6A14[0x50];
-  u8 status;        //0x6A64: indicates active abnormal stats: sleep=1 poison=2 paralysis=4 dizzy=16
+  u8 status;            //0x6A64: indicates active abnormal stats: sleep=1 poison=2 paralysis=4 dizzy=10
+  u8 pad_0x6A65[0x309];
+  u8 is_rideon;         //0x6D6E: 00 normal 01 riding
   } Monster;
 /* Notes:
 naming convention:
-	static: always or almost always fixed for a given monster
-	fixed: always fixed to some value
-	unused: always 0
-	vary: changes between quests, but stays constant within the quest
-	dynamic: changes within the quest
-	pair: has some kind of relationship with another field
+  static: always or almost always fixed for a given monster
+  fixed: always fixed to some value
+  unused: always 0
+  vary: changes between quests, but stays constant within the quest
+  dynamic: changes within the quest
+  pair: has some kind of relationship with another field
   0x1:    2bytes static. Different for each big monster(except special, and changes when not first monster), but for small monsters is B1 4F or B2 4F
   0x3:    1byte fixed. Fixed at 1
   0x4:    8bytes unused.
@@ -158,6 +168,10 @@ naming convention:
   0x1445: 1byte vary. Thought was bit pattern that could tell variant monsters from normal (gold rathian vs rathian at bit position 0x40) but turns out it doesn't always work
   0x1447: 1byte vary. 00, 01, or 03 (maybe quest level?)
   0x6A07: 1byte vary.
+  0x69E1: 1byte fixed. Fixed at FF. Haven't tested many monsters
+  0x6B5C: 1byte dynamic. Some kind of state: 00, 01, 02, 03
+  0x6B04: 1 byte vary.
+  0x6BEC: 1byte dynamic. Some kind of flag. Starts at 00, after a while turns 01, and returns to 00 after death. Does not indicate capturability
 */
 
 typedef struct

@@ -70,7 +70,7 @@ void drawHealthBar(int row, int col, int hp, int max_hp)
     return;
   
   color c = calculateColor(hp, max_hp);
-  u8 bar_length = calculatePercentage(hp, max_hp) * settings.health_bar_width / 100;
+  u16 bar_length = calculatePercentage(hp, max_hp) * settings.health_bar_width / 100;
   
   drawBorder(row, col, 7, WHITE);
   drawRect(row+2, col+2, 3, bar_length, c);
@@ -82,7 +82,7 @@ void drawHealthBarWithParts(int row, int col, int hp, int max_hp, MonsterCache* 
     return;
   
   color c = calculateColor(hp, max_hp);
-  u8 bar_length = calculatePercentage(hp, max_hp) * settings.health_bar_width / 100;
+  u16 bar_length = calculatePercentage(hp, max_hp) * settings.health_bar_width / 100;
   
   drawBorder(row, col, CHAR_HEIGHT, WHITE);
   drawRect(row+2, col+2, 3, bar_length, c);
@@ -90,13 +90,13 @@ void drawHealthBarWithParts(int row, int col, int hp, int max_hp, MonsterCache* 
   //center divide
   drawRect(row + 7-2, col, 1, 2+settings.health_bar_width+2, WHITE);
 
-  u8 offset = 2;
+  u16 offset = 2;
   for (u8 i = 0; i < MAX_PARTS_PER_MONSTER; i++)
   {
     if (cache->p[i].max_break_hp <= 5)
       continue;
     
-    u8 part_bar_max_length = cache->p[i].max_break_hp * settings.health_bar_width / cache->break_hp_sum;
+    u16 part_bar_max_length = cache->p[i].max_break_hp * settings.health_bar_width / cache->break_hp_sum;
     
     //don't draw bar if it has been broken once and the part HP is at maximum
     //note: you can't tell the difference between a part that is broken and a part that has been partially broken once and has returned back to full health,
@@ -223,7 +223,7 @@ u32 debugListStructs()
 
 u32 debugBitChecker()
 {
-  static const u16 offsets[] = {0x68FC, 0x68FD, 0x68FE, 0x68FF, 0x6900, 0x6901};
+  static const u16 offsets[] = {0x6E08, 0x6E09, 0x6E0D, 0x6E30, 0x3AD8, 0x6B04};
   static const u8 bits[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
   if (sizeof(offsets) / sizeof(offsets[0]) != sizeof(bits) / sizeof(bits[0]))
@@ -239,7 +239,7 @@ u32 debugBitChecker()
   for (u8 i = 0; i < MAX_POINTERS_IN_LIST; i++)
   {
     Monster* m = settings.pointer_list->m[i];
-    if (!m || m->max_hp < 550)
+    if (!m || isSmallMonster(m))
       continue;
     
     if (!drawn)
@@ -251,7 +251,7 @@ u32 debugBitChecker()
     u16 col = 2;
     for (u8 j = 0; j < sizeof(offsets) / sizeof(offsets[0]); j++)
     {
-      if (j == 2 || j == 4)
+      if (j == 4)
       {
         col += CHAR_WIDTH;
       }
@@ -260,8 +260,17 @@ u32 debugBitChecker()
         col = 2;
         row += CHAR_HEIGHT;
       } */
+      /* if (j > 6)
+      {
+        u16 value = *((u16*)((u32)m + offsets[j]));
+        xsprintf(msg, "%04X", value);
+        drawString(row, col, WHITE, msg);
+        col += CHAR_WIDTH*5;
+        continue;
+      } */
       u8 value = *((u8*)((u32)m + offsets[j]));
-      xsprintf(msg, "%02X", value & bits[j]);
+      //xsprintf(msg, "%02X", value & bits[j]);
+      xsprintf(msg, "%02X", value);
       drawString(row, col, WHITE, msg);
       col += CHAR_WIDTH*3;
     }
@@ -305,7 +314,7 @@ u32 debugFileSystemTest()
   return 0;
 }
 
-u32 displayInfo()
+u32 displayInfo(u8 is_3D_on, u8 is_right_buffer)
 {
   u8 count = 0;
   u16 row = 0; //keep away from top edge of screen
@@ -317,9 +326,7 @@ u32 displayInfo()
   
   updateMonsterCache(settings.pointer_list);
   
-  //calculate offsets to display location
-  //note: top/bottom screen separation is done by overlayCallback()
-  //note: display size includes background, but offsets do not
+  //calculate display size of background
   u16 display_width = TEXT_BORDER-BACKGROUND_BORDER + CHAR_WIDTH*8 + TEXT_BORDER*2 + 2+settings.health_bar_width+2 + TEXT_BORDER-BACKGROUND_BORDER;
   if (settings.show_percentage)
   {
@@ -330,6 +337,8 @@ u32 displayInfo()
     display_width += CHAR_WIDTH*12 + TEXT_BORDER-BACKGROUND_BORDER;
   }
   u16 display_height = TEXT_BORDER-BACKGROUND_BORDER + CHAR_HEIGHT*count + TEXT_BORDER-BACKGROUND_BORDER;
+  
+  //calculate offsets to display location, not including background  
   u16 row_offset, col_offset;
   switch (settings.display_location)
   {
@@ -343,11 +352,21 @@ u32 displayInfo()
       break;
     case 2: //top top-right
       row_offset = TEXT_BORDER * 4;
-      col_offset = TOP_SCRN_WIDTH - display_width + TEXT_BORDER-BACKGROUND_BORDER;
+      col_offset = TOP_SCRN_WIDTH - display_width;
+      //parallax adjustment
+      //  if offset is positive, adjust right buffer
+      //  if offset is negative, adjust left buffer
+      col_offset -= abs(settings.parallax_offset) * 
+        (is_3D_on && (is_right_buffer == (settings.parallax_offset > 0)));
       break;
     case 3: //top bottom-left
       row_offset = SCREEN_HEIGHT - display_height + TEXT_BORDER-BACKGROUND_BORDER;
       col_offset = TEXT_BORDER;
+      //parallax adjustment
+      //  if offset is positive, adjust left buffer
+      //  if offset is negative, adjust right buffer
+      col_offset += abs(settings.parallax_offset) * 
+        (is_3D_on && (is_right_buffer == (settings.parallax_offset < 0)));
       break;
   }
   
@@ -361,8 +380,7 @@ u32 displayInfo()
   {
     u16 col = col_offset;
     Monster* m = settings.pointer_list->m[i];
-    if (!m ||
-        (!settings.show_small_monsters && (m->identifier3 == 0 || m->identifier3 == 0x80)))
+    if (!m || (!settings.show_small_monsters && isSmallMonster(m)))
       continue;
     
     //draw main health bar
@@ -467,7 +485,7 @@ u32 overlayCallback(u32 isBottom, u32 addr, u32 addrB, u32 stride, u32 format)
       findListPointer(&settings);
     }
     else if (settings.show_overlay && settings.display_location < 2)
-      return displayInfo();
+      return displayInfo(0, 0);
   }
   else if (settings.show_overlay && settings.display_location > 1) //should display in top screen
   {
@@ -477,12 +495,14 @@ u32 overlayCallback(u32 isBottom, u32 addr, u32 addrB, u32 stride, u32 format)
     }
     else
     {
+      u8 is_3D_on = addrB && addr != addrB;
+      
       setState(addr, stride, format, TOP_SCRN_WIDTH);
-      u32 result = displayInfo();
-      if (addrB && addr != addrB)
+      u32 result = displayInfo(is_3D_on, 0); //adjust the left screen offset if 3D is on
+      if (is_3D_on)
       {
         setState(addrB, stride, format, TOP_SCRN_WIDTH);
-        result |= displayInfo();
+        result |= displayInfo(is_3D_on, 1);
       }
       
       return result;

@@ -10,6 +10,7 @@ u32 displayMenu(u32 key, volatile Settings *settings, volatile MenuState* menu)
       "Display location",
       "Background level",
       "Health bar width",
+      "3D depth",
       "",
       "Search for monster list",
     };
@@ -19,6 +20,7 @@ u32 displayMenu(u32 key, volatile Settings *settings, volatile MenuState* menu)
       {"off", "on"},
       {"numbers", "percentage"},
       {"BTM TOP-LEFT", "BTM BTM-LEFT", "TOP TOP-RIGHT", "TOP BTM_LEFT"},
+      {},
       {},
       {},
       {},
@@ -32,15 +34,16 @@ u32 displayMenu(u32 key, volatile Settings *settings, volatile MenuState* menu)
       {"Location of the overlay", "First part is top/bottom screen,", "and second part is screen corner"},
       {"Transparency of the overlay background", "Higher values are darker", "Set to 0 to disable background"},
       {"Length of the HP bar, in pixels", "Part bars will also scale", ""},
+      {"Depth of 3D, if active", "Positive values make the display float", "Negative values make the display sink"},
       {"", "", ""},
-      {"Try this if nothing displays", "Make sure you are in a quest", "Current location: "},
+      {"Try this if nothing displays", "Make sure you are in a quest", "Current location"},
     };
   static const u8 num_options = sizeof(menu_options) / sizeof(char*);
   static const u8 max_displayed_options = 14;
   static volatile u8 opp_state = 0; //used to index menu_states for non-settings operations
   static u8 index = 0;
   static u8 display_index_start = 0;
-  static u8 display_index_end = 8;  //manually adjust this to 1 minus either num_options or max_displayed_options, whichever is smaller
+  static u8 display_index_end = 9;  //manually adjust this to 1 minus either num_options or max_displayed_options, whichever is smaller
   static u64 tick = 0;
   
   drawTransparentBlackRect(0, 0, SCREEN_HEIGHT, BTM_SCRN_WIDTH, 2);
@@ -100,9 +103,15 @@ u32 displayMenu(u32 key, volatile Settings *settings, volatile MenuState* menu)
         settings->health_bar_width--;
         break;
       case 7:
-        //do nothing
+        if (settings->parallax_offset > -15)
+        {
+          settings->parallax_offset--;
+        }
         break;
       case 8:
+        //do nothing
+        break;
+      case 9:
         menu->is_busy = 1;
         opp_state = 1;
         opp_state = (findListPointer(settings)) ? 2 : 3;
@@ -139,9 +148,15 @@ u32 displayMenu(u32 key, volatile Settings *settings, volatile MenuState* menu)
         settings->health_bar_width++;
         break;
       case 7:
-        //do nothing
+        if (settings->parallax_offset < 15)
+        {
+          settings->parallax_offset++;
+        }
         break;
       case 8:
+        //do nothing
+        break;
+      case 9:
         menu->is_busy = 1;
         opp_state = 1;
         opp_state = (findListPointer(settings)) ? 2 : 3;
@@ -198,9 +213,12 @@ u32 displayMenu(u32 key, volatile Settings *settings, volatile MenuState* menu)
         xsprintf(msg, "%s: %u", menu_options[i], settings->health_bar_width);
         break;
       case 7:
-        xsprintf(msg, "");
+        xsprintf(msg, "%s: %d", menu_options[i], settings->parallax_offset);
         break;
       case 8:
+        xsprintf(msg, "");
+        break;
+      case 9:
         xsprintf(msg, "%s: %s", menu_options[i], menu_states[i][opp_state]);
         break;
     }
@@ -219,9 +237,9 @@ u32 displayMenu(u32 key, volatile Settings *settings, volatile MenuState* menu)
   for (u8 i = 0; i < 3; i++)
   {
     //dynamic descriptions
-    if (index == 8 && i == 2)
+    if (index == 9 && i == 2)
     {
-      xsprintf(msg, "%s %08X", state_descriptions[index][i], settings->pointer_list);
+      xsprintf(msg, "%s: %08X", state_descriptions[index][i], settings->pointer_list);
     }
     else
     {

@@ -10,6 +10,7 @@
 
 #pragma pack(push,1)
 
+//note: to maintain binary compatability when upgrading, don't modify the existing fields
 typedef struct
 {
   u8 is_modified;
@@ -22,6 +23,8 @@ typedef struct
                           //2 = top top-right, 3 = top bottom-left
   u8 background_level;
   u8 health_bar_width;
+  //v1.1 release^^^
+  s8 parallax_offset;
 } Settings;
 
 #pragma pack(pop)
