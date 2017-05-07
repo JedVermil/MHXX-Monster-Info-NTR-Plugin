@@ -25,6 +25,9 @@ typedef struct
   u8 health_bar_width;
   //v1.1 release^^^
   s8 parallax_offset;
+  //v1.2 release^^^
+  u8 language;            //0 = English, 1 = Japanese
+  //v1.3 release^^^
 } Settings;
 
 #pragma pack(pop)

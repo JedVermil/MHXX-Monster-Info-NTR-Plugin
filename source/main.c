@@ -17,6 +17,7 @@ Handle fsUserHandle = 0;
 //static vars
 static volatile Settings settings = {
     .is_modified = 0,
+    .language = 0,
     .pointer_list = 0,
     .show_overlay = 1,
     .show_small_monsters = 0,
@@ -84,7 +85,7 @@ void drawHealthBarWithParts(int row, int col, int hp, int max_hp, MonsterCache* 
   color c = calculateColor(hp, max_hp);
   u16 bar_length = calculatePercentage(hp, max_hp) * settings.health_bar_width / 100;
   
-  drawBorder(row, col, CHAR_HEIGHT, WHITE);
+  drawBorder(row, col, ROW_HEIGHT, WHITE);
   drawRect(row+2, col+2, 3, bar_length, c);
   
   //center divide
@@ -129,7 +130,7 @@ void drawHealthBarWithParts(int row, int col, int hp, int max_hp, MonsterCache* 
 
 u32 debugListPointers()
 {
-  u16 row = CHAR_HEIGHT;
+  u16 row = ROW_HEIGHT;
   char msg[100];
   
   drawString(row, 4, WHITE, "DEBUG: List Pointers");
@@ -151,70 +152,26 @@ u32 debugListPointers()
 
 u32 debugListStructs()
 {
-  u16 row = CHAR_HEIGHT;
+  u16 row = ROW_HEIGHT;
   char msg[BTM_SCRN_WIDTH/CHAR_WIDTH];
   u8 drawn = 0;
-  
-  updateMonsterCache(settings.pointer_list);
-  
-  drawTransparentBlackRect(row-2, 2, 2 + CHAR_HEIGHT*CHAR_WIDTH + 2, BTM_SCRN_WIDTH-4, 2);
-  for (u8 j = 0; j < MAX_PARTS_PER_MONSTER; j++)
-  {
-    Monster* m1 = settings.pointer_list->m[0];
-    Monster* m2 = settings.pointer_list->m[1];
-    if (!m1)
-      continue;
-    else if (!m2)
-    {
-      xsprintf(msg, "%4u/%4u %4d/%4d", 
-        m1->parts[j].stagger_hp, getCachedMonsterByIndex(0)->p[j].max_stagger_hp,
-        m1->parts[j].break_hp, getCachedMonsterByIndex(0)->p[j].max_break_hp);
-    }
-    else
-    {
-      xsprintf(msg, "%4u/%4u %3d/%3d  %4u/%4u %3d/%3d", 
-        m1->parts[j].stagger_hp, getCachedMonsterByIndex(0)->p[j].max_stagger_hp,
-        m1->parts[j].break_hp, getCachedMonsterByIndex(0)->p[j].max_break_hp,
-        m2->parts[j].stagger_hp, getCachedMonsterByIndex(1)->p[j].max_stagger_hp,
-        m2->parts[j].break_hp, getCachedMonsterByIndex(1)->p[j].max_break_hp);
-    }
-    
-    drawString(row, 2, WHITE, msg);
-    row += CHAR_HEIGHT;
-  }
-  
-  return 0;
-  
+      
   for (u8 i = 0; i < MAX_POINTERS_IN_LIST; i++)
   {
     Monster* m = settings.pointer_list->m[i];
     if (!m)
       continue;
-    if (m->identifier3 == 0 || m->identifier3 == 0x80)
-      continue;
     
     if (!drawn)
     {
-      drawTransparentBlackRect(row-2, 2, 2 + CHAR_HEIGHT*CHAR_WIDTH + 2, BTM_SCRN_WIDTH-4, 2);
+      drawTransparentBlackRect(row-2, 2, 2 + ROW_HEIGHT*CHAR_WIDTH + 2, BTM_SCRN_WIDTH-4, 2);
       drawn = 1;
     }
     
-    /* xsprintf(msg, "%u: %02X %02X %02X", 
-      m->hp, m->identifier1, m->identifier2, m->identifier3);
+    xsprintf(msg, "%u: %02X %02X", 
+      m->hp, m->identifier1, m->identifier2);
     drawString(row, 2, WHITE, msg);
-    row += CHAR_HEIGHT; */
-    /* xsprintf(msg, "%4u %4u  %4u %4u  %4u %4u", 
-      m->poison, m->max_poison, m->paralysis, m->max_paralysis, m->sleep, m->max_sleep);
-    drawString(row, 2, WHITE, msg);
-    row += CHAR_HEIGHT;
-    xsprintf(msg, "%4u  %4u  %4u %4u  %4u %4u", 
-      m->dizzy, m->exhaust, m->jump, m->max_jump, m->blast, m->max_blast);
-    drawString(row, 2, WHITE, msg);
-    row += CHAR_HEIGHT;
-    xsprintf(msg, "%2u  %2u  %2u  %2u  %2u", 
-      m->is_asleep, m->jump_counter, m->ride_counter, m->blast_counter, m->status);
-    drawString(row, 2, WHITE, msg);
-    row += CHAR_HEIGHT; */
+    row += ROW_HEIGHT;
     
   }
   
@@ -223,16 +180,16 @@ u32 debugListStructs()
 
 u32 debugBitChecker()
 {
-  static const u16 offsets[] = {0x6E08, 0x6E09, 0x6E0D, 0x6E30, 0x3AD8, 0x6B04};
-  static const u8 bits[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+  static const u16 offsets[] = {0x6E0D, 0x0, 0x228, 0x1262, 0x1266, 0x1170, 0x1260, 0x1438, 0x1439, 0x143A, 0x3AD8, 0x6E08, 0x6E09, 0x6E30};
+  static const u8 bits[] = {0xFF};
 
-  if (sizeof(offsets) / sizeof(offsets[0]) != sizeof(bits) / sizeof(bits[0]))
+  /* if (sizeof(offsets) / sizeof(offsets[0]) != sizeof(bits) / sizeof(bits[0]))
   {
     drawString(10, 2, RED, "FAIL: offsets and bits do not match");
     return 0;
-  }
+  } */
   
-  u16 row = CHAR_HEIGHT;
+  u16 row = ROW_HEIGHT;
   char msg[BTM_SCRN_WIDTH/CHAR_WIDTH];
   u8 drawn = 0;
   
@@ -244,21 +201,30 @@ u32 debugBitChecker()
     
     if (!drawn)
     {
-      drawTransparentBlackRect(row-2, 2, 2 + CHAR_HEIGHT*CHAR_WIDTH + 2, BTM_SCRN_WIDTH-4, 1);
+      drawTransparentBlackRect(row-2, 2, 2 + ROW_HEIGHT*CHAR_WIDTH + 2, BTM_SCRN_WIDTH-4, 1);
       drawn = 1;
+    }
+    
+    if (i == 0)
+    {
+      xsprintf(msg, "MAP: %02X", *((u8*)((u32)m + offsets[0])));
+      drawString(row, 2, WHITE, msg);
+      row += ROW_HEIGHT;
     }
     
     u16 col = 2;
     for (u8 j = 0; j < sizeof(offsets) / sizeof(offsets[0]); j++)
     {
-      if (j == 4)
+      if (j == 0)
+        continue;
+      if (j == 5)
       {
         col += CHAR_WIDTH;
       }
       /* if (j > 0 && j % 10 == 0)
       {
         col = 2;
-        row += CHAR_HEIGHT;
+        row += ROW_HEIGHT;
       } */
       /* if (j > 6)
       {
@@ -274,7 +240,7 @@ u32 debugBitChecker()
       drawString(row, col, WHITE, msg);
       col += CHAR_WIDTH*3;
     }
-    row += CHAR_HEIGHT;
+    row += ROW_HEIGHT;
   }
   
   return 0;
@@ -287,7 +253,7 @@ u32 debugFindListPointer()
   if (findListPointer(&settings))
   {
     xsprintf(msg, "Found pointer: %08X", (u32)settings.pointer_list);
-    drawString(CHAR_HEIGHT, 2, WHITE, msg);
+    drawString(ROW_HEIGHT, 2, WHITE, msg);
   }
   
   return 0;
@@ -300,7 +266,7 @@ u32 debugFileSystemTest()
   
   if (run_once)
   {
-    drawString(CHAR_HEIGHT*2, 2, WHITE, msg);
+    drawString(ROW_HEIGHT*2, 2, WHITE, msg);
     return 0;
   }
   run_once = 1;
@@ -312,6 +278,19 @@ u32 debugFileSystemTest()
   xsprintf(msg, "%8X  %8X", r1, r2);
   
   return 0;
+}
+
+void displaySpecialStatHelper(u16 current_value, u16 max_value, u16 row, u16 col, color c)
+{
+  char msg[10];
+  
+  if (max_value == 0xFFFF)
+    return;
+  
+  xsprintf(msg, "%4u", (settings.show_percentage) ? 
+    calculatePercentage(max_value - current_value, max_value) : 
+    max_value - current_value);
+  drawString(row, col, c, msg);
 }
 
 u32 displayInfo(u8 is_3D_on, u8 is_right_buffer)
@@ -336,7 +315,7 @@ u32 displayInfo(u8 is_3D_on, u8 is_right_buffer)
   {
     display_width += CHAR_WIDTH*12 + TEXT_BORDER-BACKGROUND_BORDER;
   }
-  u16 display_height = TEXT_BORDER-BACKGROUND_BORDER + CHAR_HEIGHT*count + TEXT_BORDER-BACKGROUND_BORDER;
+  u16 display_height = TEXT_BORDER-BACKGROUND_BORDER + ROW_HEIGHT*count*2 + TEXT_BORDER-BACKGROUND_BORDER;
   
   //calculate offsets to display location, not including background  
   u16 row_offset, col_offset;
@@ -383,6 +362,35 @@ u32 displayInfo(u8 is_3D_on, u8 is_right_buffer)
     if (!m || (!settings.show_small_monsters && isSmallMonster(m)))
       continue;
     
+    //draw monster name
+    MonsterInfo* m_info = getMonsterInfoFromDB(m);
+    switch (settings.language)
+    {
+      case 1:
+        drawMisakiString(row_offset + row+1, col, (m_info->is_hyper) ? RED : WHITE, m_info->jp_name);
+        break;
+      default:
+        drawString(row_offset + row+1, col, (m_info->is_hyper) ? RED : WHITE, m_info->name);
+        break;
+    }
+    col += CHAR_WIDTH*11;
+    
+    //draw dizzy/exhaust/blast/sleep
+    if (settings.show_special_stats)
+    {
+      //right align the text
+      col = col_offset + display_width - BACKGROUND_BORDER - CHAR_WIDTH*16 - TEXT_BORDER;
+      
+      displaySpecialStatHelper(m->jump, m->max_jump, row_offset + row+1, col, LIGHT_GREEN);
+      displaySpecialStatHelper(m->exhaust, m->max_exhaust, row_offset + row+1, col + CHAR_WIDTH*4, LIGHT_BLUE);
+      displaySpecialStatHelper(m->blast, m->max_blast, row_offset + row+1, col + CHAR_WIDTH*8, VIOLET);
+      displaySpecialStatHelper(m->dizzy, m->max_dizzy, row_offset + row+1, col + CHAR_WIDTH*12, ORANGE);
+    }
+    
+    //new row
+    col = col_offset;
+    row += ROW_HEIGHT;
+    
     //draw main health bar
     if (settings.show_percentage)
     {
@@ -410,21 +418,12 @@ u32 displayInfo(u8 is_3D_on, u8 is_right_buffer)
     //draw poison/paralysis/sleep
     if (settings.show_special_stats)
     {
-      xsprintf(msg, "%4u", (settings.show_percentage) ? 
-        calculatePercentage(m->max_poison - m->poison, m->max_poison) : 
-        m->max_poison - m->poison);
-      drawString(row_offset + row+1, col, PURPLE, msg);
-      xsprintf(msg, "%4u", (settings.show_percentage) ? 
-        calculatePercentage(m->max_paralysis - m->paralysis, m->max_paralysis) : 
-        m->max_paralysis - m->paralysis);
-      drawString(row_offset + row+1, col + CHAR_WIDTH*4, YELLOW, msg);
-      xsprintf(msg, "%4u", (settings.show_percentage) ? 
-        calculatePercentage(m->max_sleep - m->sleep, m->max_sleep) : 
-        m->max_sleep - m->sleep);
-      drawString(row_offset + row+1, col + CHAR_WIDTH*8, CYAN, msg);
+      displaySpecialStatHelper(m->poison, m->max_poison, row_offset + row+1, col, PURPLE);
+      displaySpecialStatHelper(m->paralysis, m->max_paralysis, row_offset + row+1, col + CHAR_WIDTH*4, YELLOW);
+      displaySpecialStatHelper(m->sleep, m->max_sleep, row_offset + row+1, col + CHAR_WIDTH*8, CYAN);
     }
     
-    row += CHAR_HEIGHT;
+    row += ROW_HEIGHT;
   }
   
   return 0;
@@ -528,6 +527,7 @@ int main()
     //need this to open files, for the first parameter to FSUSER_~ calls
     //note: plgGetSharedServiceHandle("fs:USER", &fsUserHandle) doesn't work here as it's only for home menu
   
+  initMonsterInfoDB();
   loadSettings(&settings);
   plgRegisterCallback(CALLBACK_OVERLAY, (void*) overlayCallback, 0);
   

@@ -31,7 +31,57 @@ void drawString(int posR, int posC, color c, u8* buffer)
     posR, posC, c.r, c.g, c.b, buffer);
 }
 
-void ovDrawTranspartBlackRect(u32 addr, u32 stride, u32 format, int r, int c, int h, int w, u8 level) {
+void drawMisakiString(int y, int x, color c, u8* buffer)
+{
+  if (y + ROW_HEIGHT > SCREEN_HEIGHT)
+    return;
+  
+  s16 x_ = (s16)x;
+  u8 is_kanji = 0;
+  
+  for (u8 i = 0; ; i++)
+  {
+    if (x_ + CHAR_WIDTH > screen_width_cache)
+      return;
+      
+    switch (buffer[i])
+    {
+      case 0xFF:  //terminator
+        return;
+      case 0xF0:  //hiragana/katagana
+        is_kanji = 0;
+        break;
+      case 0xF2:  //kanji
+        is_kanji = 1;
+        break;
+      default:
+        if (x_ >= 0)
+        {
+          drawMisakiChar(y, x_, c, (is_kanji) ? misaki2 : misaki1, buffer[i]);
+        }
+        x_ += CHAR_WIDTH;
+        break;
+    }
+  }
+}
+
+static void drawMisakiChar(int y, int x, color c, const unsigned char font[][8], u8 letter)
+{
+  //note: misaki font is organized differently than font.h
+  //      each byte for a character is a column, not a row
+  for (u8 i = 0; i < CHAR_WIDTH-1; i++) //skip last column since none of the chars used are non-zero
+  {
+    for (u8 j = 0; j < CHAR_HEIGHT; j++)
+    {
+      if ((0x1 << j) & font[letter][i])
+      {
+        ovDrawPixel(addr_cache, stride_cache, format_cache, y+j, x+i, c.r, c.g, c.b);
+      }
+    }
+  }
+}
+
+static void ovDrawTranspartBlackRect(u32 addr, u32 stride, u32 format, int r, int c, int h, int w, u8 level) {
 	format &= 0x0f;
   u16 posC = max((s16)c, 0);
   u16 max_posC = min((s16)c + w, screen_width_cache);
@@ -69,7 +119,7 @@ void ovDrawTranspartBlackRect(u32 addr, u32 stride, u32 format, int r, int c, in
 	}
 }
 
-void ovDrawPixel(u32 addr, u32 stride, u32 format, int posR, int posC, u32 r, u32 g, u32 b) {
+static void ovDrawPixel(u32 addr, u32 stride, u32 format, int posR, int posC, u32 r, u32 g, u32 b) {
 	format &= 0x0f;	
 	if (format == 2) {
 		u16 pix =  ((r ) << 11) | ((g ) << 5) | (b );
@@ -82,7 +132,7 @@ void ovDrawPixel(u32 addr, u32 stride, u32 format, int posR, int posC, u32 r, u3
 	}
 }
 
-void ovDrawRect(u32 addr, u32 stride, u32 format, int posR, int posC, int h, int w, u32 r, u32 g, u32 b) {
+static void ovDrawRect(u32 addr, u32 stride, u32 format, int posR, int posC, int h, int w, u32 r, u32 g, u32 b) {
   int r_;
   u16 c_ = max((s16)posC, 0);
   u16 max_c = min((s16)posC + w, screen_width_cache);
@@ -97,21 +147,23 @@ void ovDrawRect(u32 addr, u32 stride, u32 format, int posR, int posC, int h, int
 	}
 }
 
-void ovDrawChar(u32 addr, u32 stride, u32 format, u8 letter,int y, int x, u32 r, u32 g, u32 b){
+static void ovDrawChar(u32 addr, u32 stride, u32 format, u8 letter,int y, int x, u32 r, u32 g, u32 b){
   int i;
   int k;
   int c;
   unsigned char mask;
-  unsigned char* _letter;
   unsigned char l; 
 
+  //magic value due to commenting in font.h
 	if ((letter < 32) || (letter > 127)) {
 		letter = '?';
 	}
 
+  //magic value to calculate first byte of char
+  //note: would have been much easier to just use a matrix IMO
   c=(letter-32)*CHAR_WIDTH;
 
-  for (i = 0; i < CHAR_WIDTH; i++){
+  for (i = 0; i < CHAR_HEIGHT; i++){
     mask = 0b10000000;
     l = font[i+c];
     for (k = 0; k < CHAR_WIDTH; k++){
@@ -122,8 +174,8 @@ void ovDrawChar(u32 addr, u32 stride, u32 format, u8 letter,int y, int x, u32 r,
   }
 }
 
-void ovDrawString(u32 addr, u32 stride, u32 format, u32 scrnWidth, int posR, int posC, u32 r, u32 g, u32 b, u8* buf) {
-    if (posR + CHAR_HEIGHT > SCREEN_HEIGHT)
+static void ovDrawString(u32 addr, u32 stride, u32 format, u32 scrnWidth, int posR, int posC, u32 r, u32 g, u32 b, u8* buf) {
+    if (posR + ROW_HEIGHT > SCREEN_HEIGHT)
       return;
     
     s16 c = (s16)posC;
