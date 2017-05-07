@@ -15,11 +15,14 @@ Once a mission loads you will see all monsters listed on the bottom of the scree
 - Orange: 20% ~ 30% health
 - Red: 0% ~ 20% health
 
+![legend](/special%20stats%20english.png?raw=true "legend")
+![legend2](/special%20stats%20japanese.png?raw=true "legend2")
+
+HP bars are separated by a horizontal divide to segment a top portion and a bottom portion. The top portion shows the main HP, while the bottom portion shows part HPs relative to each other; small monsters do not have the bottom portion. The part HP is a work-in-progress and not only that not all breakable parts are shown, but some of the shown parts don't take damage; this is because the game uses different rules for different parts, and these rules change depending on the monster in question. 
+
 There are 4 locations possible for the display: top screen top-right, top screen bottom-left, bottom screen top-left, and bottom screen bottom-left.
 
 ![4locations](/4locations.png?raw=true "4locations")
-
-HP bars are separated by a horizontal divide to segment a top portion and a bottom portion. The top portion shows the main HP, while the bottom portion shows part HPs relative to each other; small monsters do not have the bottom portion. The part HP is a work-in-progress and not only that not all breakable parts are shown, but some of the shown parts don't take damage; this is because the game uses different rules for different parts, and these rules change depending on the monster in question. 
 
 ## Notes
 
