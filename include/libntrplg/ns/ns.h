@@ -1,3 +1,5 @@
+#pragma once
+
 #define NS_DEFAULT_MEM_REGION 0x300
 
 #define DEBUG_BUFFER_SIZE 0x4000
