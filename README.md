@@ -33,4 +33,5 @@ If you update the game version to something newer you might find that the monste
 ## Special Thanks
 
 This project uses the Misaki font: [github](https://github.com/emutyworks/8x8DotJPFont)
+
 This project uses Kiranico's MHXX database values: [mhxx.kiranico.com](https://mhxx.kiranico.com/)
