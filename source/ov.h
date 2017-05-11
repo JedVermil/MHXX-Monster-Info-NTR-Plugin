@@ -3,13 +3,7 @@
 #include "global.h"
 #include "font.h"
 #include "misaki_font.h"
-
-#define max(x,y) ( \
-    { __auto_type __x = (x); __auto_type __y = (y); \
-      __x > __y ? __x : __y; })
-#define min(x,y) ( \
-    { __auto_type __x = (x); __auto_type __y = (y); \
-      __x < __y ? __x : __y; })
+#include "misc_funcs.h"
 
 #define SCREEN_HEIGHT 240
 #define TOP_SCRN_WIDTH 400
@@ -20,6 +14,7 @@
 #define WHITE (color){.r = 255, .g = 255, .b = 255}
 #define RED (color){.r = 255, .g = 0, .b = 0}
 #define GREEN (color){.r = 0, .g = 255, .b = 0}
+#define BLUE (color){.r = 0, .g = 0, .b = 255}
 #define ORANGE (color){.r = 255, .g = 220, .b = 0}
 #define PURPLE (color){.r = 255, .g = 0, .b = 255}
 #define YELLOW (color){.r = 255, .g = 255, .b = 0}
@@ -28,6 +23,7 @@
 #define LIGHT_BLUE (color){.r = 210, .g = 180, .b = 250}
 #define VIOLET (color){.r = 20, .g = 20, .b = 255}
 #define LIGHT_GREEN (color){.r = 0, .g = 255, .b = 10}
+#define GOLD (color){.r = 255, .g = 245, .b = 10}
 
 void setState(u32 addr, u32 stride, u32 format, u32 screen_width);
 void drawTransparentBlackRect(int r, int c, int h, int w, int level);

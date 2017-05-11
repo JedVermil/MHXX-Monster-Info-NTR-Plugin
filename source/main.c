@@ -4,6 +4,7 @@
 #include "settings.h"
 #include "menu.h"
 #include "mem_ops.h"
+#include "misc_funcs.h"
 
 #define STARTUP_BANNER_TIMEOUT_COUNT 60
 #define BACKGROUND_BORDER 2
@@ -17,17 +18,20 @@ Handle fsUserHandle = 0;
 //static vars
 static volatile Settings settings = {
     .is_modified = 0,
-    .language = 0,
     .pointer_list = 0,
     .show_overlay = 1,
+    .language = 0,
     .show_small_monsters = 0,
     .show_special_stats = 1,
+    .show_size = 1,
     .show_percentage = 0,
     .display_location = 0,
     .background_level = 1,
     .health_bar_width = 100,
+    .stat_enabled = {1, 1, 1, 1, 1, 1, 1},
+    .stat_color = {PURPLE, YELLOW, CYAN, ORANGE, LIGHT_BLUE, VIOLET, LIGHT_GREEN},
   };
-
+  
 color calculateColor(int hp, int max_hp)
 {
   if (hp == 0)
@@ -99,6 +103,12 @@ void drawHealthBarWithParts(int row, int col, int hp, int max_hp, MonsterCache* 
     
     u16 part_bar_max_length = cache->p[i].max_break_hp * settings.health_bar_width / cache->break_hp_sum;
     
+    //guard against part bar protruding out of bounds
+    if (col + offset + part_bar_max_length > col + 2+settings.health_bar_width)
+    {
+      part_bar_max_length -= 4;
+    }
+    
     //don't draw bar if it has been broken once and the part HP is at maximum
     //note: you can't tell the difference between a part that is broken and a part that has been partially broken once and has returned back to full health,
     //      but if it's broken for good then the part HP is fixed at max
@@ -161,18 +171,53 @@ u32 debugListStructs()
     Monster* m = settings.pointer_list->m[i];
     if (!m)
       continue;
+    if (isSmallMonster(m))
+      continue;
     
     if (!drawn)
     {
-      drawTransparentBlackRect(row-2, 2, 2 + ROW_HEIGHT*CHAR_WIDTH + 2, BTM_SCRN_WIDTH-4, 2);
+      drawTransparentBlackRect(row-2, 2, 2 + ROW_HEIGHT*10 + 2, BTM_SCRN_WIDTH-4, 2);
       drawn = 1;
     }
     
-    xsprintf(msg, "%u: %02X %02X", 
+    /* xsprintf(msg, "%u: %02X %02X", 
       m->hp, m->identifier1, m->identifier2);
     drawString(row, 2, WHITE, msg);
+    row += ROW_HEIGHT; */
+    
+    /* drawString(row, 2, WHITE, "#   s  shp   b  bhp");
     row += ROW_HEIGHT;
     
+    for (u8 j = 0; j < 8; j++)
+    {
+      xsprintf(msg, "%u   %u  %3u   %u  %3d",
+        j+1, m->parts[j].stagger_count, m->parts[j].stagger_hp,
+        m->parts[j].break_count, m->parts[j].break_hp);
+      drawString(row, 2, WHITE, msg);
+      row += ROW_HEIGHT;
+    } */
+    
+    MonsterInfo* m_info = getMonsterInfoFromDB(m);
+    double test1 = m->size_multiplier;
+    dtoa(test1, msg, 2);
+    drawString(row+1, 2, WHITE, msg);
+    row += ROW_HEIGHT;
+    double test2 = m_info->base_size;
+    dtoa(test2, msg, 2);
+    drawString(row+1, 2, WHITE, msg);
+    row += ROW_HEIGHT;
+    double test3 = test1 * test2;
+    dtoa(test3, msg, 2);
+    drawString(row+1, 2, WHITE, msg);
+    row += ROW_HEIGHT;
+    drawString(row+1, 2, WHITE, (test2 == 0) ? "equal 0" : "");
+    row += ROW_HEIGHT;
+    drawString(row+1, 2, WHITE, (test3 < m_info->s_size) ? "is small" : "");
+    row += ROW_HEIGHT;
+    drawString(row+1, 2, WHITE, (test3 > m_info->l_size) ? "is large" : "");
+    row += ROW_HEIGHT;
+    drawString(row+1, 2, WHITE, (test3 > m_info->xl_size) ? "is extra large" : "");
+    row += ROW_HEIGHT;
   }
   
   return 0;
@@ -295,11 +340,9 @@ void displaySpecialStatHelper(u16 current_value, u16 max_value, u16 row, u16 col
 
 u32 displayInfo(u8 is_3D_on, u8 is_right_buffer)
 {
-  u8 count = 0;
-  u16 row = 0; //keep away from top edge of screen
   char msg[BTM_SCRN_WIDTH/CHAR_WIDTH];
   
-  count = getMonsterCount(settings.pointer_list, settings.show_small_monsters);
+  u8 count = getMonsterCount(settings.pointer_list, settings.show_small_monsters);
   if (count == 0)
     return 1;
   
@@ -307,7 +350,7 @@ u32 displayInfo(u8 is_3D_on, u8 is_right_buffer)
   
   //calculate display size of background
   u16 display_width = TEXT_BORDER-BACKGROUND_BORDER + CHAR_WIDTH*8 + TEXT_BORDER*2 + 2+settings.health_bar_width+2 + TEXT_BORDER-BACKGROUND_BORDER;
-  if (settings.show_percentage)
+  if (settings.show_percentage && !settings.show_size)
   {
     display_width -= CHAR_WIDTH*2;
   }
@@ -355,6 +398,7 @@ u32 displayInfo(u8 is_3D_on, u8 is_right_buffer)
     col_offset - (TEXT_BORDER-BACKGROUND_BORDER), 
     display_height, display_width, settings.background_level);
   
+  u16 row = row_offset;
   for (u8 i = 0; i < MAX_POINTERS_IN_LIST; i++)
   {
     u16 col = col_offset;
@@ -367,24 +411,66 @@ u32 displayInfo(u8 is_3D_on, u8 is_right_buffer)
     switch (settings.language)
     {
       case 1:
-        drawMisakiString(row_offset + row+1, col, (m_info->is_hyper) ? RED : WHITE, m_info->jp_name);
+        drawMisakiString(row+1, col, (m_info->is_hyper) ? RED : WHITE, m_info->jp_name);
         break;
       default:
-        drawString(row_offset + row+1, col, (m_info->is_hyper) ? RED : WHITE, m_info->name);
+        drawString(row+1, col, (m_info->is_hyper) ? RED : WHITE, m_info->name);
         break;
     }
     col += CHAR_WIDTH*11;
+    
+    //draw monster size
+    if (settings.show_size && m_info->base_size > 0)
+    {
+      double size = m->size_multiplier * m_info->base_size;
+      size_t num_digits = dtoa(size, msg, 2);
+      drawString(row+1, col, WHITE, msg);
+      col += CHAR_WIDTH * num_digits;
+      
+      //size checks
+      //note: we make some adjustments to account for inaccuracies in size calculation
+      if ((int)size < m_info->s_size + 0.1)
+      {
+        drawString(row+1, col, GOLD, " S");
+      }
+      else if (ceiling(size) > m_info->xl_size - 0.1)
+      {
+        drawString(row+1, col, GOLD, "XL");
+      }
+      else if (ceiling(size) > m_info->l_size - 0.1)
+      {
+        drawString(row+1, col, GOLD, " L");
+      }
+      
+      col += CHAR_WIDTH*1;
+    }
     
     //draw dizzy/exhaust/blast/sleep
     if (settings.show_special_stats)
     {
       //right align the text
-      col = col_offset + display_width - BACKGROUND_BORDER - CHAR_WIDTH*16 - TEXT_BORDER;
+      u16 new_col = col_offset + display_width - BACKGROUND_BORDER - CHAR_WIDTH*16 - TEXT_BORDER;
+      if (new_col > col)
+      { //avoids clipping into already drawn text
+        col = new_col;
+      }
       
-      displaySpecialStatHelper(m->jump, m->max_jump, row_offset + row+1, col, LIGHT_GREEN);
-      displaySpecialStatHelper(m->exhaust, m->max_exhaust, row_offset + row+1, col + CHAR_WIDTH*4, LIGHT_BLUE);
-      displaySpecialStatHelper(m->blast, m->max_blast, row_offset + row+1, col + CHAR_WIDTH*8, VIOLET);
-      displaySpecialStatHelper(m->dizzy, m->max_dizzy, row_offset + row+1, col + CHAR_WIDTH*12, ORANGE);
+      if (settings.stat_enabled[6])
+      {
+        displaySpecialStatHelper(m->jump, m->max_jump, row+1, col, settings.stat_color[6]);
+      }
+      if (settings.stat_enabled[4])
+      {
+        displaySpecialStatHelper(m->exhaust, m->max_exhaust, row+1, col + CHAR_WIDTH*4, settings.stat_color[4]);
+      }
+      if (settings.stat_enabled[5])
+      {
+        displaySpecialStatHelper(m->blast, m->max_blast, row+1, col + CHAR_WIDTH*8, settings.stat_color[5]);
+      }
+      if (settings.stat_enabled[3])
+      {
+        displaySpecialStatHelper(m->dizzy, m->max_dizzy, row+1, col + CHAR_WIDTH*12, settings.stat_color[3]);
+      }
     }
     
     //new row
@@ -395,32 +481,41 @@ u32 displayInfo(u8 is_3D_on, u8 is_right_buffer)
     if (settings.show_percentage)
     {
       xsprintf(msg, "HP:%3u", calculatePercentage(m->hp, m->max_hp));
-      drawString(row_offset + row+1, col, WHITE, msg);
+      drawString(row+1, col, WHITE, msg);
       col += CHAR_WIDTH*6 + TEXT_BORDER*2;
     }
     else
     {
       xsprintf(msg, "HP:%5u", m->hp);
-      drawString(row_offset + row+1, col, WHITE, msg);
+      drawString(row+1, col, WHITE, msg);
       col += CHAR_WIDTH*8 + TEXT_BORDER*2;
     }
     MonsterCache* cache = getCachedMonsterByPointer(m);
     if (cache)
     {
-      drawHealthBarWithParts(row_offset + row, col, m->hp, m->max_hp, cache);
+      drawHealthBarWithParts(row, col, m->hp, m->max_hp, cache);
     }
     else
     {
-      drawHealthBar(row_offset + row, col, m->hp, m->max_hp);
+      drawHealthBar(row, col, m->hp, m->max_hp);
     }
     col += 2+settings.health_bar_width+2;
     
     //draw poison/paralysis/sleep
     if (settings.show_special_stats)
     {
-      displaySpecialStatHelper(m->poison, m->max_poison, row_offset + row+1, col, PURPLE);
-      displaySpecialStatHelper(m->paralysis, m->max_paralysis, row_offset + row+1, col + CHAR_WIDTH*4, YELLOW);
-      displaySpecialStatHelper(m->sleep, m->max_sleep, row_offset + row+1, col + CHAR_WIDTH*8, CYAN);
+      if (settings.stat_enabled[0])
+      {
+        displaySpecialStatHelper(m->poison, m->max_poison, row+1, col, settings.stat_color[0]);
+      }
+      if (settings.stat_enabled[1])
+      {
+        displaySpecialStatHelper(m->paralysis, m->max_paralysis, row+1, col + CHAR_WIDTH*4, settings.stat_color[1]);
+      }
+      if (settings.stat_enabled[2])
+      {
+        displaySpecialStatHelper(m->sleep, m->max_sleep, row+1, col + CHAR_WIDTH*8, settings.stat_color[2]);
+      }
     }
     
     row += ROW_HEIGHT;
@@ -478,7 +573,7 @@ u32 overlayCallback(u32 isBottom, u32 addr, u32 addrB, u32 stride, u32 format)
       drawString(TEXT_BORDER, TEXT_BORDER, WHITE, "MHXX Overlay Plugin Active");
       count++;
     }
-    
+        
     if (!settings.pointer_list)
     {
       findListPointer(&settings);

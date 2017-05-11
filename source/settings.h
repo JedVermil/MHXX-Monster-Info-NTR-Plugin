@@ -28,6 +28,9 @@ typedef struct
   //v1.2 release^^^
   u8 language;            //0 = English, 1 = Japanese
   //v1.3 release^^^
+  u8 show_size;           //0 = off, 1 = on
+  u8 stat_enabled[7];     //whether or not a stat is enabled (1 or 0): poison, paralysis, sleep, dizzy, exhaust, blast, jump
+  color stat_color[7];    //the color of a stat
 } Settings;
 
 #pragma pack(pop)
