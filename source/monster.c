@@ -154,15 +154,28 @@ u8 getMonsterCount(MonsterPointerList* list, u8 show_small_monsters)
 
 MonsterInfo* getMonsterInfoFromDB(Monster* m)
 {
-  u32 id;
-
-  id = m->identifier1;
+  u32 id = m->identifier1;
   id <<= 8;
   id += m->identifier2;
-  
   void* result = bsearch(&id, database, num_db_entries, sizeof(MonsterInfo), compareMonsterInfo);
-    
-  return (result == NULL) ? &unknown : (MonsterInfo*)result;
+  
+  if (result)
+    return (MonsterInfo*)result;
+  
+  //try again for English patch users
+  //note: the patch introduces a shift of 0xD580 for identifier1
+  id = (u16)(m->identifier1 - 0xD580); //allow it to underflow in u16
+  id <<= 8;
+  id += m->identifier2;
+  result = bsearch(&id, database, num_db_entries, sizeof(MonsterInfo), compareMonsterInfo);
+  
+  if (result)
+    return (MonsterInfo*)result;
+  
+  //couldn't find anything, report calculated ID
+  xsprintf(unknown.name, "%04X%02X", m->identifier1, m->identifier2);
+  
+  return &unknown;
 }
 MonsterInfo* getMonsterInfoByIndex(u8 index)
 {
